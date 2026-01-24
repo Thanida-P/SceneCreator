@@ -193,6 +193,8 @@ export class FurnitureEditController extends XRControllerBase {
   private onFurnitureMove?: (id: string, delta: THREE.Vector3) => void;
   private onFurnitureRotate?: (id: string, deltaY: number) => void;
   private onFurnitureDeselect?: (id: string) => void;
+  private onWallFurnitureMove?: (id: string, deltaVertical: number, deltaHorizontal: number) => void;
+  private isWallMountedCallback?: (id: string) => boolean;
 
   constructor(
     config: ControllerConfig = {},
@@ -200,12 +202,16 @@ export class FurnitureEditController extends XRControllerBase {
       onFurnitureMove?: (id: string, delta: THREE.Vector3) => void;
       onFurnitureRotate?: (id: string, deltaY: number) => void;
       onFurnitureDeselect?: (id: string) => void;
+      onWallFurnitureMove?: (id: string, deltaVertical: number, deltaHorizontal: number) => void;
+      isWallMounted?: (id: string) => boolean;
     }
   ) {
     super(config);
     this.onFurnitureMove = callbacks?.onFurnitureMove;
     this.onFurnitureRotate = callbacks?.onFurnitureRotate;
     this.onFurnitureDeselect = callbacks?.onFurnitureDeselect;
+    this.onWallFurnitureMove = callbacks?.onWallFurnitureMove;
+    this.isWallMountedCallback = callbacks?.isWallMounted;
   }
 
   setSelectedFurniture(id: string | null): void {
@@ -262,19 +268,29 @@ export class FurnitureEditController extends XRControllerBase {
     });
 
     if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
-      const forward = new THREE.Vector3();
-      camera.getWorldDirection(forward);
-      forward.y = 0;
-      forward.normalize();
+      // Check if furniture is wall-mounted
+      const isWallMounted = this.isWallMountedCallback?.(this.selectedFurnitureId) || false;
+      
+      if (isWallMounted && this.onWallFurnitureMove) {
+        const deltaVertical = -moveZ * this.config.moveSpeed * delta;
+        const deltaHorizontal = moveX * this.config.moveSpeed * delta;
+        this.onWallFurnitureMove(this.selectedFurnitureId, deltaVertical, deltaHorizontal);
+      } else {
+        // Floor-based movement (original behavior)
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
 
-      const right = new THREE.Vector3();
-      right.crossVectors(forward, camera.up).normalize();
+        const right = new THREE.Vector3();
+        right.crossVectors(forward, camera.up).normalize();
 
-      const deltaPosition = new THREE.Vector3();
-      deltaPosition.addScaledVector(forward, -moveZ * this.config.moveSpeed * delta);
-      deltaPosition.addScaledVector(right, moveX * this.config.moveSpeed * delta);
+        const deltaPosition = new THREE.Vector3();
+        deltaPosition.addScaledVector(forward, -moveZ * this.config.moveSpeed * delta);
+        deltaPosition.addScaledVector(right, moveX * this.config.moveSpeed * delta);
 
-      this.onFurnitureMove?.(this.selectedFurnitureId, deltaPosition);
+        this.onFurnitureMove?.(this.selectedFurnitureId, deltaPosition);
+      }
     }
 
     if (Math.abs(rotateInput) > 0) {

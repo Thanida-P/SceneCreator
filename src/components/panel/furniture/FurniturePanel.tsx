@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Text } from "@react-three/drei";
-import { Furniture } from "../../types/Furniture";
+import { FurnitureItem } from "../../../core/objects/FurnitureItem";
 import { FurnitureImage } from "./FurnitureImage";
 import { RoundedPlane, GradientBackground, CardBackground } from "../common/PanelElements";
 
@@ -13,9 +13,9 @@ export function VRFurniturePanel({
   onClose
 }: {
   show: boolean;
-  catalog: Furniture[];
+  catalog: FurnitureItem[];
   loading: boolean;
-  onSelectItem: (f: Furniture) => void;
+  onSelectItem: (f: FurnitureItem) => void;
   placedFurnitureIds?: string[];
   onClose: () => void;
 }) {

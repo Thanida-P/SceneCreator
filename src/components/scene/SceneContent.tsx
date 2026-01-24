@@ -640,7 +640,6 @@ class SceneContentLogic {
       return;
     }
 
-    const spawnPos = this.sceneManager.calculateSpawnPosition(camera, 2);
     const uniqueId = `${f.id}-${Date.now()}`;
 
     const metadata: FurnitureMetadata = {
@@ -1065,6 +1064,8 @@ interface SceneState {
   showRotationGizmo: boolean;  // ADD THIS
   rotationGizmoPosition: [number, number, number] | null; // ADD THIS
   showScalePanel: boolean;
+  selectedItemWallMountable: boolean;
+  selectedItemPlacementMode: 'floor' | 'wall';
 }
 
 class SceneContentLogic {
@@ -1119,6 +1120,8 @@ class SceneContentLogic {
       showRotationGizmo: false,  // ADD THIS
       rotationGizmoPosition: null,  // ADD THIS
       showScalePanel: false,
+      selectedItemWallMountable: false,
+      selectedItemPlacementMode: 'floor',
     };
   }
 
@@ -1164,6 +1167,12 @@ class SceneContentLogic {
         },
         onFurnitureDeselect: (id) => {
           this.handleFurnitureDeselect(id);
+        },
+        onWallFurnitureMove: async (id, deltaVertical, deltaHorizontal) => {
+          await this.handleWallFurnitureMove(id, deltaVertical, deltaHorizontal);
+        },
+        isWallMounted: (id) => {
+          return this.sceneManager?.isWallMounted(id) || false;
         },
       }
     );
@@ -1234,6 +1243,7 @@ class SceneContentLogic {
           category: item.category,
           type: item.type,
           is_container: item.is_container,
+          wall_mountable: item.wall_mountable || false,
         }));
 
         this.updateState({ furnitureCatalog: items });
@@ -1557,6 +1567,37 @@ class SceneContentLogic {
     }
   }
 
+  private async handleWallFurnitureMove(
+    id: string,
+    deltaVertical: number,
+    deltaHorizontal: number
+  ): Promise<void> {
+    if (!this.sceneManager) return;
+
+    const furniture = this.sceneManager.getFurniture(id);
+    if (!furniture || !furniture.isOnWall()) return;
+
+    const result = await this.sceneManager.moveWallFurniture(id, deltaVertical, deltaHorizontal);
+
+    if (!result.success && result.needsConfirmation) {
+      const currentPos = furniture.getPosition();
+      const newPos = furniture.moveAlongWall(deltaVertical, deltaHorizontal);
+      this.pendingMove = newPos;
+      this.updateState({ showMoveCloserPanel: true });
+    } else if (result.success && result.needsPreciseCheck) {
+      const newPos = furniture.getPosition();
+      this.currentAABBPosition = newPos;
+      this.updateState({ showPreciseCheckPanel: true });
+    } else if (!result.success && !result.needsConfirmation) {
+      if (result.reason) {
+        this.showNotificationMessage(`⚠️ ${result.reason}`, 'error');
+      }
+      this.currentAABBPosition = null;
+    } else if (result.success && !result.needsPreciseCheck) {
+      this.currentAABBPosition = null;
+    }
+  }
+
   private handleFurnitureRotate(id: string, deltaY: number): void {
     if (!this.sceneManager) return;
 
@@ -1589,10 +1630,12 @@ private handleFurnitureDeselect(id: string): void {
     showSlider: false,
     showTransformGizmo: false,
     gizmoPosition: null,
-    showRotationGizmo: false,  // ADD THIS
-    rotationGizmoPosition: null,  // ADD THIS
+    showRotationGizmo: false,
+    rotationGizmoPosition: null,
     showScalePanel: false,
-    sidebarActiveItem: null
+    sidebarActiveItem: null,
+    selectedItemWallMountable: false,
+    selectedItemPlacementMode: 'floor',
   });
   this.currentAABBPosition = null;
   this.pendingMove = null;
@@ -1706,7 +1749,12 @@ private handleFurnitureDeselect(id: string): void {
       return;
     }
 
+    const isWallMountable = f.wall_mountable || false;
+    
+    // ALL items (including wall-mountable) spawn on the floor by default
     const spawnPos = this.sceneManager.calculateSpawnPosition(camera, 2);
+    const initialRotation: [number, number, number] = [0, 0, 0];
+
     const uniqueId = `${f.id}-${Date.now()}`;
 
     const metadata: FurnitureMetadata = {
@@ -1715,6 +1763,7 @@ private handleFurnitureDeselect(id: string): void {
       type: f.type,
       isContainer: f.is_container,
       image: f.image,
+      wallMountable: isWallMountable,
     };
 
     const newFurniture = new FurnitureItem(
@@ -1725,7 +1774,7 @@ private handleFurnitureDeselect(id: string): void {
       metadata,
       {
         position: spawnPos,
-        rotation: [0, 0, 0],
+        rotation: initialRotation,
         scale: this.state.sliderValue,
       }
     );
@@ -1735,9 +1784,11 @@ private handleFurnitureDeselect(id: string): void {
       this.furnitureController?.setSelectedFurniture(uniqueId);
       this.updateState({
         selectedItemId: uniqueId,
-        rotationValue: 0,
+        rotationValue: initialRotation[1],
         showSlider: true,
         showFurniture: false,
+        selectedItemWallMountable: isWallMountable,
+        selectedItemPlacementMode: 'floor',
       });
     });
   }
@@ -1769,6 +1820,8 @@ private handleFurnitureDeselect(id: string): void {
       gizmoPosition: null,
       showRotationGizmo: false,
       rotationGizmoPosition: null,
+      selectedItemWallMountable: false,
+      selectedItemPlacementMode: 'floor',
     });
     return;
   }
@@ -1798,11 +1851,17 @@ private handleFurnitureDeselect(id: string): void {
     const showMovementGizmo = this.state.sidebarActiveItem === 'movement';
     const showRotGizmo = this.state.sidebarActiveItem === 'rotation';
 
+    // Track wall-mountable state
+    const isWallMountable = furniture.isWallMountable();
+    const placementMode = furniture.getPlacementMode();
+
     console.log(`[handleSelectItem] ✅ Furniture selected:`, {
       id,
       movementMode: showMovementGizmo,
       rotationMode: showRotGizmo,
       position,
+      isWallMountable,
+      placementMode,
     });
 
     this.updateState({
@@ -1814,6 +1873,8 @@ private handleFurnitureDeselect(id: string): void {
       gizmoPosition: showMovementGizmo ? position : null,
       showRotationGizmo: showRotGizmo,
       rotationGizmoPosition: showRotGizmo ? position : null,
+      selectedItemWallMountable: isWallMountable,
+      selectedItemPlacementMode: placementMode,
     });
   }
 }
@@ -1925,6 +1986,40 @@ private handleFurnitureDeselect(id: string): void {
   this.updateState({ rotationValue: normalizedRotation });
 }
 
+  // Toggle between floor and wall placement for wall-mountable items
+  handleToggleWallPlacement(camera: THREE.Camera): void {
+    if (!this.state.selectedItemId || !this.sceneManager) {
+      this.showNotificationMessage('Please select a furniture item first', 'info');
+      return;
+    }
+
+    const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
+    if (!furniture) return;
+
+    if (!furniture.isWallMountable()) {
+      this.showNotificationMessage('This item cannot be wall-mounted', 'info');
+      return;
+    }
+
+    const result = this.sceneManager.toggleWallPlacement(this.state.selectedItemId, camera);
+
+    if (result.success) {
+      const newPosition = furniture.getPosition();
+      
+      this.updateState({
+        selectedItemPlacementMode: result.placementMode,
+        gizmoPosition: this.state.showTransformGizmo ? newPosition : null,
+        rotationGizmoPosition: this.state.showRotationGizmo ? newPosition : null,
+      });
+
+      this.showNotificationMessage(
+        result.placementMode === 'wall' ? '📌 Item placed on wall' : '📦 Item placed on floor',
+        'success'
+      );
+    } else {
+      this.showNotificationMessage(result.message || 'Failed to toggle placement', 'error');
+    }
+  }
 
  handleScaleChange(newScale: number): void {
   // Clamp between 0.5 and 3
@@ -2005,6 +2100,8 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
     showRotationGizmo: false,  // ADD THIS
     rotationGizmoPosition: null, // ADD THIS
     showScalePanel: false,
+    selectedItemWallMountable: false,
+    selectedItemPlacementMode: 'floor',
   });
 
   const logicRef = useRef<SceneContentLogic | null>(null);
@@ -2248,13 +2345,14 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
         )}
       </HeadLockedUI>
 
-      {/* ADD VRSidebar HERE */}
-     {/* Replace the current VRSidebar section with this: */}
       <HeadLockedUI distance={1.4} verticalOffset={0} enabled={state.showSidebar}>
         <group position={[-0.8, 0, 0]}> {/* Offset to the left within head-locked space */}
           <VRSidebar
             show={state.showSidebar}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
+            showWallToggle={state.selectedItemWallMountable && state.selectedItemId !== null}
+            isOnWall={state.selectedItemPlacementMode === 'wall'}
+            onWallToggle={() => logic.handleToggleWallPlacement(camera)}
           />
         </group>
       </HeadLockedUI>
