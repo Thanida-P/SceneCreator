@@ -1580,7 +1580,6 @@ class SceneContentLogic {
     const result = await this.sceneManager.moveWallFurniture(id, deltaVertical, deltaHorizontal);
 
     if (!result.success && result.needsConfirmation) {
-      const currentPos = furniture.getPosition();
       const newPos = furniture.moveAlongWall(deltaVertical, deltaHorizontal);
       this.pendingMove = newPos;
       this.updateState({ showMoveCloserPanel: true });

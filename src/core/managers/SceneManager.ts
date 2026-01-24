@@ -419,7 +419,52 @@ export class SceneManager {
 
     const newPosition = furniture.moveAlongWall(deltaVertical, deltaHorizontal);
     
-    return this.moveFurniture(id, newPosition, false, false);
+    // Check if the new position would hit another wall
+    const roomBoundary = this.collisionDetector.getRoomBoundary();
+    if (roomBoundary) {
+      const wallPlacement = furniture.getWallPlacement();
+      if (wallPlacement) {
+        const wallNormal = wallPlacement.wallNormal;
+        const margin = 0.1;
+        
+        if (Math.abs(wallNormal[2]) > Math.abs(wallNormal[0])) {
+          if (newPosition[0] < roomBoundary.min.x + margin || newPosition[0] > roomBoundary.max.x - margin) {
+            return {
+              success: false,
+              needsConfirmation: false,
+              needsPreciseCheck: false,
+              reason: 'Cannot move further - wall boundary reached'
+            };
+          }
+        } else {
+          if (newPosition[2] < roomBoundary.min.z + margin || newPosition[2] > roomBoundary.max.z - margin) {
+            return {
+              success: false,
+              needsConfirmation: false,
+              needsPreciseCheck: false,
+              reason: 'Cannot move further - wall boundary reached'
+            };
+          }
+        }
+        
+        if (newPosition[1] < roomBoundary.min.y + margin || newPosition[1] > roomBoundary.max.y - margin) {
+          return {
+            success: false,
+            needsConfirmation: false,
+            needsPreciseCheck: false,
+            reason: 'Cannot move further - floor/ceiling boundary reached'
+          };
+        }
+      }
+    }
+    
+    furniture.setPosition(newPosition);
+    
+    if (this.config.enableCollisionDetection) {
+      await this.updateFurnitureCollision(id);
+    }
+    
+    return { success: true, needsConfirmation: false, needsPreciseCheck: false };
   }
 
   scaleFurniture(id: string, scale: number | [number, number, number]): boolean {
