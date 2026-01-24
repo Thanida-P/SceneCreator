@@ -2059,6 +2059,9 @@ private handleFurnitureDeselect(id: string): void {
     if (!this.state.navigationMode && this.state.selectedItemId && this.furnitureController) {
       this.furnitureController.update(session, camera, delta);
     }
+
+    // Update furniture animations
+    this.sceneManager?.updateAnimations(delta);
   }
 
 
@@ -2145,8 +2148,12 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
   }, [logicRef.current?.modelUrlCache.size]);
 
   useFrame((_state, delta) => {
+    if (!logicRef.current) return;
+    
+    logicRef.current.sceneManager?.updateAnimations(delta);
+    
     const session = xr.session;
-    if (!session || !logicRef.current) return;
+    if (!session) return;
     logicRef.current.updateFrame(session, camera, delta);
   });
 

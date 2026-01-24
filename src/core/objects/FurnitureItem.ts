@@ -27,6 +27,9 @@ export class FurnitureItem extends Base3DObject {
   protected collisionIndicator: THREE.Group | null = null;
   protected placementMode: PlacementMode = 'floor';
   protected wallPlacement: WallPlacementInfo | null = null;
+  protected mixer: THREE.AnimationMixer | null = null;
+  protected animations: THREE.AnimationClip[] = [];
+  protected actions: THREE.AnimationAction[] = [];
 
   constructor(
     id: string,
@@ -96,7 +99,12 @@ export class FurnitureItem extends Base3DObject {
     return new Promise((resolve, reject) => {
       this.loader.load(
         path,
-        (gltf) => resolve(gltf.scene),
+        (gltf) => {
+          if (gltf.animations && gltf.animations.length > 0) {
+            this.animations = gltf.animations;
+          }
+          resolve(gltf.scene);
+        },
         undefined,
         reject
       );
@@ -135,6 +143,50 @@ export class FurnitureItem extends Base3DObject {
 
   protected onModelLoaded(model: THREE.Group): void {
     void model;
+    
+    if (this.animations.length > 0) {
+      this.setupAnimations();
+    }
+  }
+
+  protected setupAnimations(): void {
+    this.mixer = new THREE.AnimationMixer(this.modelGroup);
+    
+    this.actions = this.animations.map(clip => {
+      const action = this.mixer!.clipAction(clip);
+      action.play();
+      return action;
+    });
+  }
+
+  update(delta: number): void {
+    if (this.mixer) {
+      this.mixer.update(delta);
+    }
+  }
+
+  hasAnimations(): boolean {
+    return this.animations.length > 0;
+  }
+
+  // Stop all animations
+  stopAnimations(): void {
+    this.actions.forEach(action => action.stop());
+  }
+
+  // Play all animations
+  playAnimations(): void {
+    this.actions.forEach(action => action.play());
+  }
+
+  // Pause all animations
+  pauseAnimations(): void {
+    this.actions.forEach(action => action.paused = true);
+  }
+
+  // Resume all animations
+  resumeAnimations(): void {
+    this.actions.forEach(action => action.paused = false);
   }
 
   protected onModelLoadError(error: unknown): void {
@@ -304,6 +356,13 @@ export class FurnitureItem extends Base3DObject {
   }
 
   dispose(): void {
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+      this.mixer = null;
+    }
+    this.actions = [];
+    this.animations = [];
+    
     if (this.selectionIndicator) {
       this.group.remove(this.selectionIndicator);
       this.selectionIndicator = null;

@@ -595,6 +595,13 @@ export class SceneManager {
     this.config.enableCollisionDetection = enabled;
   }
 
+  // Update all furniture animations
+  updateAnimations(delta: number): void {
+    this.furnitureItems.forEach((furniture) => {
+      furniture.update(delta);
+    });
+  }
+
   dispose(): void {
     this.clearAllFurniture();
     
