@@ -8,6 +8,14 @@ export interface FurnitureMetadata {
   type?: string;
   isContainer?: boolean;
   image?: string;
+  wallMountable?: boolean;
+}
+
+export type PlacementMode = 'floor' | 'wall';
+
+export interface WallPlacementInfo {
+  wallNormal: [number, number, number];
+  wallPosition: number;
 }
 
 export class FurnitureItem extends Base3DObject {
@@ -17,6 +25,11 @@ export class FurnitureItem extends Base3DObject {
   protected loader: GLTFLoader;
   protected selectionIndicator: THREE.Group | null = null;
   protected collisionIndicator: THREE.Group | null = null;
+  protected placementMode: PlacementMode = 'floor';
+  protected wallPlacement: WallPlacementInfo | null = null;
+  protected mixer: THREE.AnimationMixer | null = null;
+  protected animations: THREE.AnimationClip[] = [];
+  protected actions: THREE.AnimationAction[] = [];
 
   constructor(
     id: string,
@@ -31,11 +44,67 @@ export class FurnitureItem extends Base3DObject {
     this.loader = new GLTFLoader();
   }
 
+  // Wall mounting methods
+  isWallMountable(): boolean {
+    return this.metadata.wallMountable || false;
+  }
+
+  getPlacementMode(): PlacementMode {
+    return this.placementMode;
+  }
+
+  setPlacementMode(mode: PlacementMode): void {
+    this.placementMode = mode;
+    if (mode === 'floor') {
+      this.wallPlacement = null;
+    }
+  }
+
+  isOnWall(): boolean {
+    return this.placementMode === 'wall';
+  }
+
+  setWallPlacement(info: WallPlacementInfo): void {
+    this.placementMode = 'wall';
+    this.wallPlacement = info;
+  }
+
+  getWallPlacement(): WallPlacementInfo | null {
+    return this.wallPlacement;
+  }
+
+  // Move along wall surface
+  moveAlongWall(deltaVertical: number, deltaHorizontal: number): [number, number, number] {
+    const currentPos = this.getPosition();
+    const newPos: [number, number, number] = [...currentPos];
+    
+    if (!this.wallPlacement) {
+      return newPos;
+    }
+
+    const wallNormal = this.wallPlacement.wallNormal;
+    
+    newPos[1] += deltaVertical;
+    
+    if (Math.abs(wallNormal[2]) > Math.abs(wallNormal[0])) {
+      newPos[0] += deltaHorizontal;
+    } else {
+      newPos[2] += deltaHorizontal;
+    }
+
+    return newPos;
+  }
+
   protected async fetchModel(path: string): Promise<THREE.Group> {
     return new Promise((resolve, reject) => {
       this.loader.load(
         path,
-        (gltf) => resolve(gltf.scene),
+        (gltf) => {
+          if (gltf.animations && gltf.animations.length > 0) {
+            this.animations = gltf.animations;
+          }
+          resolve(gltf.scene);
+        },
         undefined,
         reject
       );
@@ -46,12 +115,82 @@ export class FurnitureItem extends Base3DObject {
     const clonedModel = model.clone();
     this.modelGroup.clear();
     
-    // Align to floor
     const box = new THREE.Box3().setFromObject(clonedModel);
-    const minY = box.min.y;
-    clonedModel.position.y = -minY;
+    
+    if (this.placementMode === 'wall' && this.wallPlacement) {
+      const wallNormal = this.wallPlacement.wallNormal;
+      
+      if (Math.abs(wallNormal[2]) > Math.abs(wallNormal[0])) {
+        if (wallNormal[2] > 0) {
+          clonedModel.position.z = -box.min.z;
+        } else {
+          clonedModel.position.z = -box.max.z;
+        }
+      } else {
+        if (wallNormal[0] > 0) {
+          clonedModel.position.x = -box.min.x;
+        } else {
+          clonedModel.position.x = -box.max.x;
+        }
+      }
+    } else {
+      const minY = box.min.y;
+      clonedModel.position.y = -minY;
+    }
     
     this.modelGroup.add(clonedModel);
+  }
+
+  protected onModelLoaded(model: THREE.Group): void {
+    void model;
+    
+    if (this.animations.length > 0) {
+      this.setupAnimations();
+    }
+  }
+
+  protected setupAnimations(): void {
+    this.mixer = new THREE.AnimationMixer(this.modelGroup);
+    
+    this.actions = this.animations.map(clip => {
+      const action = this.mixer!.clipAction(clip);
+      action.play();
+      return action;
+    });
+  }
+
+  update(delta: number): void {
+    if (this.mixer) {
+      this.mixer.update(delta);
+    }
+  }
+
+  hasAnimations(): boolean {
+    return this.animations.length > 0;
+  }
+
+  // Stop all animations
+  stopAnimations(): void {
+    this.actions.forEach(action => action.stop());
+  }
+
+  // Play all animations
+  playAnimations(): void {
+    this.actions.forEach(action => action.play());
+  }
+
+  // Pause all animations
+  pauseAnimations(): void {
+    this.actions.forEach(action => action.paused = true);
+  }
+
+  // Resume all animations
+  resumeAnimations(): void {
+    this.actions.forEach(action => action.paused = false);
+  }
+
+  protected onModelLoadError(error: unknown): void {
+    console.error(`Failed to load model for furniture ${this.name}`, error);
   }
 
   getMetadata(): FurnitureMetadata {
@@ -198,7 +337,7 @@ export class FurnitureItem extends Base3DObject {
     );
   }
 
-  serialize(): Record<string, any> {
+  serialize(): Record<string, unknown> {
     const scale = this.getScale();
     const scaleArray = typeof scale === 'number' ? [scale, scale, scale] : scale;
 
@@ -211,10 +350,19 @@ export class FurnitureItem extends Base3DObject {
       contain: this.isContainerType() ? [] : undefined,
       composite: !this.isContainerType() ? [] : undefined,
       texture_id: null,
+      placement_mode: this.placementMode,
+      wall_placement: this.wallPlacement,
     };
   }
 
   dispose(): void {
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+      this.mixer = null;
+    }
+    this.actions = [];
+    this.animations = [];
+    
     if (this.selectionIndicator) {
       this.group.remove(this.selectionIndicator);
       this.selectionIndicator = null;
