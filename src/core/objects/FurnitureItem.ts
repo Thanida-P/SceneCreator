@@ -22,6 +22,7 @@ export class FurnitureItem extends Base3DObject {
   protected metadata: FurnitureMetadata;
   protected isSelected: boolean = false;
   protected hasCollision: boolean = false;
+  protected isFloating: boolean = false;
   protected loader: GLTFLoader;
   protected selectionIndicator: THREE.Group | null = null;
   protected collisionIndicator: THREE.Group | null = null;
@@ -84,8 +85,10 @@ export class FurnitureItem extends Base3DObject {
 
     const wallNormal = this.wallPlacement.wallNormal;
     
+    // Move vertically (up/down)
     newPos[1] += deltaVertical;
     
+    // Move horizontally along the wall
     if (Math.abs(wallNormal[2]) > Math.abs(wallNormal[0])) {
       newPos[0] += deltaHorizontal;
     } else {
@@ -214,7 +217,11 @@ export class FurnitureItem extends Base3DObject {
   }
 
   toggleSelection(): void {
-    this.isSelected ? this.deselect() : this.select();
+    if (this.isSelected) {
+      this.deselect();
+    } else {
+      this.select();
+    }
   }
 
   getIsSelected(): boolean {
@@ -227,8 +234,17 @@ export class FurnitureItem extends Base3DObject {
     this.updateCollisionIndicator();
   }
 
+  setFloating(isFloating: boolean): void {
+    this.isFloating = isFloating;
+    this.updateCollisionIndicator();
+  }
+
   getHasCollision(): boolean {
     return this.hasCollision;
+  }
+
+  getIsFloating(): boolean {
+    return this.isFloating;
   }
 
   protected updateSelectionIndicator(): void {
@@ -248,7 +264,7 @@ export class FurnitureItem extends Base3DObject {
     
     const ringGeometry = new THREE.RingGeometry(0.3, 0.35, 32);
     const ringMaterial = new THREE.MeshBasicMaterial({
-      color: this.hasCollision ? 0xff0000 : 0x00ff00,
+      color: this.hasCollision || this.isFloating ? 0xff0000 : 0x00ff00,
       transparent: true,
       opacity: 0.7,
       side: THREE.DoubleSide,
@@ -260,7 +276,7 @@ export class FurnitureItem extends Base3DObject {
 
     const coneGeometry = new THREE.ConeGeometry(0.05, 0.1, 8);
     const coneMaterial = new THREE.MeshBasicMaterial({
-      color: this.hasCollision ? 0xff0000 : 0xffff00,
+      color: this.hasCollision || this.isFloating ? 0xff0000 : 0xffff00,
     });
     const cone = new THREE.Mesh(coneGeometry, coneMaterial);
     cone.rotation.x = -Math.PI / 2;
