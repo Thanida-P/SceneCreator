@@ -129,6 +129,9 @@ export class SceneManager {
 
     if (this.selectedItemId && this.selectedItemId !== id) {
       const prevFurniture = this.furnitureItems.get(this.selectedItemId);
+      if (prevFurniture?.getIsFloating()) {
+        return false;
+      }
       prevFurniture?.deselect();
     }
 

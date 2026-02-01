@@ -1767,14 +1767,16 @@ private handleFurnitureDeselect(id: string): void {
 
     this.sceneManager.addFurniture(newFurniture).then(() => {
       this.sceneManager!.selectFurniture(uniqueId);
-      this.furnitureController?.setSelectedFurniture(uniqueId);
-      this.updateState({
-        selectedItemId: uniqueId,
-        rotationValue: initialRotation[1],
-        showSlider: true,
-        showFurniture: false,
-        selectedItemPlacementMode: 'floor',
-      });
+      if (this.sceneManager!.selectFurniture(uniqueId)) {
+        this.furnitureController?.setSelectedFurniture(uniqueId);
+        this.updateState({
+          selectedItemId: uniqueId,
+          rotationValue: initialRotation[1],
+          showSlider: true,
+          showFurniture: false,
+          selectedItemPlacementMode: 'floor',
+        });
+      }
     });
   }
 

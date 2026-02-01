@@ -211,7 +211,7 @@ export class FurnitureItem extends Base3DObject {
   }
 
   deselect(): void {
-    if (!this.isSelected) return;
+    if (!this.isSelected || this.isFloating) return;
     this.isSelected = false;
     this.updateSelectionIndicator();
   }
