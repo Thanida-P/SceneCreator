@@ -363,6 +363,11 @@ export class SceneManager {
           needsPreciseCheck: false,
           reason: 'Outside room boundary' 
         };
+      } else {
+          furniture.setPosition(newPosition);
+          furniture.setCollision(false);
+          this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+          this.lastValidPositions.set(id, newPosition);
       }
 
        // Check if object is in the air

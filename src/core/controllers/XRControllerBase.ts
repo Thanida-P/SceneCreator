@@ -95,6 +95,8 @@ export class NavigationController extends XRControllerBase {
   private rig: THREE.Group | null = null;
   private isNavigating: boolean = false;
   private onNavigationModeChange?: (isActive: boolean) => void;
+  private homeModelGroup: THREE.Group | null = null;
+  private alignmentMode: boolean = false;
 
   constructor(
     config: ControllerConfig = {},
@@ -110,6 +112,14 @@ export class NavigationController extends XRControllerBase {
 
   getRig(): THREE.Group | null {
     return this.rig;
+  }
+
+  setHomeModelGroup(homeModelGroup: THREE.Group | null): void {
+    this.homeModelGroup = homeModelGroup;
+  }
+
+  setAlignmentMode(enabled: boolean): void {
+    this.alignmentMode = enabled;
   }
 
   isNavigationActive(): boolean {
@@ -159,25 +169,50 @@ export class NavigationController extends XRControllerBase {
 
     if (!isGripPressed) return;
 
-    if (Math.abs(rotateInput) > 0) {
-      const rotationDelta = rotateInput * this.config.rotateSpeed * delta;
-      this.rig.rotateY(rotationDelta);
-    }
+    if (this.alignmentMode && this.homeModelGroup) {
+      // Alignment mode
+      if (Math.abs(rotateInput) > 0) {
+        const rotationDelta = -rotateInput * this.config.rotateSpeed * delta;
+        this.homeModelGroup.rotateY(rotationDelta);
+      }
 
-    if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
-      const forward = new THREE.Vector3();
-      camera.getWorldDirection(forward);
-      forward.y = 0;
-      forward.normalize();
+      if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
 
-      const right = new THREE.Vector3();
-      right.crossVectors(forward, camera.up).normalize();
+        const right = new THREE.Vector3();
+        right.crossVectors(forward, camera.up).normalize();
 
-      const movement = new THREE.Vector3();
-      movement.addScaledVector(forward, -moveZ * this.config.moveSpeed * delta);
-      movement.addScaledVector(right, moveX * this.config.moveSpeed * delta);
+        const movement = new THREE.Vector3();
+        movement.addScaledVector(forward, moveZ * this.config.moveSpeed * delta);
+        movement.addScaledVector(right, -moveX * this.config.moveSpeed * delta);
 
-      this.rig.position.add(movement);
+        this.homeModelGroup.position.add(movement);
+      }
+    } else if (this.rig) {
+      // Normal navigation mode
+      if (Math.abs(rotateInput) > 0) {
+        const rotationDelta = rotateInput * this.config.rotateSpeed * delta;
+        this.rig.rotateY(rotationDelta);
+      }
+
+      if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+
+        const right = new THREE.Vector3();
+        right.crossVectors(forward, camera.up).normalize();
+
+        const movement = new THREE.Vector3();
+        movement.addScaledVector(forward, -moveZ * this.config.moveSpeed * delta);
+        movement.addScaledVector(right, moveX * this.config.moveSpeed * delta);
+
+        this.rig.position.add(movement);
+      }
     }
   }
 

@@ -1016,6 +1016,7 @@ import { makeAuthenticatedRequest, logout } from "../../utils/Auth";
 import { VRSidebar } from "../panel/VRSidebar";
 import { TransformGizmo } from "../panel/TransformGizmo";
 import { RotationGizmo } from "../panel/RotationGizmo";
+import { VRAlignmentPanel, VRAlignmentConfirmPanel } from "../panel/VRAlignmentPanel";
 
 
 
@@ -1065,6 +1066,10 @@ interface SceneState {
   rotationGizmoPosition: [number, number, number] | null;
   showScalePanel: boolean;
   selectedItemPlacementMode: 'floor' | 'wall';
+  alignmentStatus: 'pending' | 'aligning' | 'aligned';
+  alignmentMode: 'world' | 'free' | null;
+  showAlignmentPanel: boolean;
+  showAlignmentConfirm: boolean;
 }
 
 class SceneContentLogic {
@@ -1095,7 +1100,7 @@ class SceneContentLogic {
     this.state = {
       showSlider: false,
       showFurniture: false,
-      showInstructions: true,
+      showInstructions: false,
       showControlPanel: false,
       showNotification: false,
       notificationMessage: "",
@@ -1112,7 +1117,7 @@ class SceneContentLogic {
       rotationValue: 0,
       furnitureCatalog: [],
       catalogLoading: false,
-      showSidebar: true,
+      showSidebar: false,
       sidebarActiveItem: null,
       showTransformGizmo: false,
       gizmoPosition: null,
@@ -1120,6 +1125,10 @@ class SceneContentLogic {
       rotationGizmoPosition: null,
       showScalePanel: false,
       selectedItemPlacementMode: 'floor',
+      alignmentStatus: 'pending',
+      alignmentMode: null,
+      showAlignmentPanel: true,
+      showAlignmentConfirm: false,
     };
   }
 
@@ -1387,6 +1396,59 @@ class SceneContentLogic {
       showMoveCloserPanel: false,
       showPreciseCheckPanel: false,
     });
+  }
+
+  handleAlignmentModeSelect(mode: "world" | "free"): void {
+    if (mode === "world") {
+      this.updateState({
+        alignmentMode: "world",
+        alignmentStatus: "aligning",
+        showAlignmentPanel: false,
+        showAlignmentConfirm: true,
+      });
+    } else {
+      // Free roam mode - skip alignment
+      this.updateState({
+        alignmentMode: "free",
+        alignmentStatus: "aligned",
+        showAlignmentPanel: false,
+        showAlignmentConfirm: false,
+        showInstructions: true,
+        showSidebar: true,
+      });
+    }
+  }
+
+  handleAlignmentConfirm(): void {
+    this.updateState({
+      alignmentStatus: "aligned",
+      showAlignmentConfirm: false,
+      showInstructions: true,
+      showSidebar: true,
+    });
+  }
+
+  handleAlignmentCancel(): void {
+    this.updateState({
+      alignmentMode: null,
+      alignmentStatus: "pending",
+      showAlignmentConfirm: false,
+      showAlignmentPanel: true,
+    });
+  }
+
+  handleToggleAlignmentMode(): void {
+    if (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "world") {
+      this.updateState({
+        alignmentMode: "free",
+      });
+    } else if (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free") {
+      this.updateState({
+        alignmentMode: "world",
+        alignmentStatus: "aligning",
+        showAlignmentConfirm: true,
+      });
+    }
   }
 
   handleSidebarItemSelect(itemId: string): void {
@@ -1712,7 +1774,7 @@ private handleFurnitureDeselect(id: string): void {
   }
 
   handleSelectFurniture(f: any, camera: THREE.Camera): void {
-    if (!this.sceneManager) return;
+    if (!this.sceneManager || this.state.alignmentStatus !== "aligned") return;
 
     const catalogId = f.id;
     const allFurniture = this.sceneManager.getAllFurniture();
@@ -1969,9 +2031,29 @@ private handleFurnitureDeselect(id: string): void {
   updateFrame(session: any, camera: THREE.Camera, delta: number): void {
     if (!session) return;
 
-    this.navigationController?.update(session, camera, delta);
+    // Set alignment mode in navigation controller
+    const isAligning = this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world";
+    if (this.navigationController) {
+      this.navigationController.setAlignmentMode(isAligning);
+      
+      if (isAligning && this.sceneManager?.getHomeModel()) {
+        this.navigationController.setHomeModelGroup(this.sceneManager.getHomeModel()!.getGroup());
+      } else {
+        this.navigationController.setHomeModelGroup(null);
+      }
+    }
 
-    if (!this.state.navigationMode && this.state.selectedItemId && this.furnitureController) {
+    const canNavigate = (this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world") ||
+                       (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free");
+    
+    if (canNavigate) {
+      this.navigationController?.update(session, camera, delta);
+    }
+
+    if (this.state.alignmentStatus === "aligned" && 
+        !this.state.navigationMode && 
+        this.state.selectedItemId && 
+        this.furnitureController) {
       this.furnitureController.update(session, camera, delta);
     }
 
@@ -1993,7 +2075,7 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
   const [state, setState] = useState<SceneState>({
     showSlider: false,
     showFurniture: false,
-    showInstructions: true,
+    showInstructions: false,
     showControlPanel: false,
     showNotification: false,
     notificationMessage: "",
@@ -2010,7 +2092,7 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
     rotationValue: 0,
     furnitureCatalog: [],
     catalogLoading: false,
-    showSidebar: true,
+    showSidebar: false,
     sidebarActiveItem: null,
     showTransformGizmo: false,
     gizmoPosition: null,
@@ -2018,6 +2100,10 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
     rotationGizmoPosition: null,
     showScalePanel: false,
     selectedItemPlacementMode: 'floor',
+    alignmentStatus: 'pending',
+    alignmentMode: null,
+    showAlignmentPanel: true,
+    showAlignmentConfirm: false,
   });
 
   const logicRef = useRef<SceneContentLogic | null>(null);
@@ -2074,6 +2160,7 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
   if (!logicRef.current) return null;
 
   const logic = logicRef.current;
+  const isAligned = state.alignmentStatus === "aligned";
   const uiLocked = state.showFurniture || 
     state.showControlPanel || 
     state.showInstructions || 
@@ -2081,7 +2168,9 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
     state.showNotification ||
     state.showMoveCloserPanel ||
     state.showScalePanel ||
-    state.showPreciseCheckPanel;
+    state.showPreciseCheckPanel ||
+    state.showAlignmentPanel ||
+    state.showAlignmentConfirm;
 
   if (state.loading) {
     return (
@@ -2138,7 +2227,7 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
                   return;
                 }
 
-                if (!state.navigationMode && !uiLocked) {
+                if (state.alignmentStatus === "aligned" && !state.navigationMode && !uiLocked) {
                   e.stopPropagation();
                   logic.handleSelectItem(furniture.getId());
                 }
@@ -2171,8 +2260,27 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
       )}
     </group>
       
-      <CatalogToggle onToggle={() => logic.handleToggleUI()} />
-      <ControlPanelToggle onToggle={() => logic.handleToggleControlPanel()} />
+      {state.alignmentStatus === "aligned" && (
+        <>
+          <CatalogToggle onToggle={() => logic.handleToggleUI()} />
+          <ControlPanelToggle onToggle={() => logic.handleToggleControlPanel()} />
+        </>
+      )}
+
+      <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showAlignmentPanel}>
+        <VRAlignmentPanel 
+          show={state.showAlignmentPanel} 
+          onSelectMode={(mode) => logic.handleAlignmentModeSelect(mode)} 
+        />
+      </HeadLockedUI>
+
+      <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showAlignmentConfirm}>
+        <VRAlignmentConfirmPanel 
+          show={state.showAlignmentConfirm} 
+          onConfirm={() => logic.handleAlignmentConfirm()} 
+          onCancel={() => logic.handleAlignmentCancel()} 
+        />
+      </HeadLockedUI>
 
       <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showInstructions}>
         <VRInstructionPanel 
@@ -2202,6 +2310,8 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
           onLogout={() => logic.handleLogout()}
           saving={state.saving}
           onClose={() => logic.updateState({ showControlPanel: false })}
+          alignmentMode={state.alignmentMode}
+          onToggleAlignment={() => logic.handleToggleAlignmentMode()}
         />
       </HeadLockedUI>
 
