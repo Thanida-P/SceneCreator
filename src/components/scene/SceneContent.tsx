@@ -1013,9 +1013,10 @@ import { FurnitureItem, FurnitureMetadata } from "../../core/objects/FurnitureIt
 import { HomeModel } from "../../core/objects/HomeModel";
 import { NavigationController, FurnitureEditController } from "../../core/controllers/XRControllerBase";
 import { makeAuthenticatedRequest, logout } from "../../utils/Auth";
-import { VRSidebar } from "../panel/VRSidebar"; //add
+import { VRSidebar } from "../panel/VRSidebar";
 import { TransformGizmo } from "../panel/TransformGizmo";
 import { RotationGizmo } from "../panel/RotationGizmo";
+import { VRAlignmentPanel, VRAlignmentConfirmPanel } from "../panel/VRAlignmentPanel";
 
 
 
@@ -1057,15 +1058,18 @@ interface SceneState {
   rotationValue: number;
   furnitureCatalog: any[];
   catalogLoading: boolean;
-  showSidebar: boolean; //add
-  sidebarActiveItem: string | null; //add
-  showTransformGizmo: boolean; // ADD THIS
-  gizmoPosition: [number, number, number] | null; // ADD THIS
-  showRotationGizmo: boolean;  // ADD THIS
-  rotationGizmoPosition: [number, number, number] | null; // ADD THIS
+  showSidebar: boolean;
+  sidebarActiveItem: string | null;
+  showTransformGizmo: boolean;
+  gizmoPosition: [number, number, number] | null;
+  showRotationGizmo: boolean;
+  rotationGizmoPosition: [number, number, number] | null;
   showScalePanel: boolean;
-  selectedItemWallMountable: boolean;
   selectedItemPlacementMode: 'floor' | 'wall';
+  alignmentStatus: 'pending' | 'aligning' | 'aligned';
+  alignmentMode: 'world' | 'free' | null;
+  showAlignmentPanel: boolean;
+  showAlignmentConfirm: boolean;
 }
 
 class SceneContentLogic {
@@ -1096,7 +1100,7 @@ class SceneContentLogic {
     this.state = {
       showSlider: false,
       showFurniture: false,
-      showInstructions: true,
+      showInstructions: false,
       showControlPanel: false,
       showNotification: false,
       notificationMessage: "",
@@ -1113,15 +1117,18 @@ class SceneContentLogic {
       rotationValue: 0,
       furnitureCatalog: [],
       catalogLoading: false,
-      showSidebar: true, //add
-      sidebarActiveItem: null, //add
-      showTransformGizmo: false, // ADD THIS
-      gizmoPosition: null, // ADD THIS
-      showRotationGizmo: false,  // ADD THIS
-      rotationGizmoPosition: null,  // ADD THIS
+      showSidebar: false,
+      sidebarActiveItem: null,
+      showTransformGizmo: false,
+      gizmoPosition: null,
+      showRotationGizmo: false,
+      rotationGizmoPosition: null,
       showScalePanel: false,
-      selectedItemWallMountable: false,
       selectedItemPlacementMode: 'floor',
+      alignmentStatus: 'pending',
+      alignmentMode: null,
+      showAlignmentPanel: true,
+      showAlignmentConfirm: false,
     };
   }
 
@@ -1173,6 +1180,9 @@ class SceneContentLogic {
         },
         isWallMounted: (id) => {
           return this.sceneManager?.isWallMounted(id) || false;
+        },
+        onUnmountFromWall: (id) => {
+          this.sceneManager?.unmountFromWallAndFloat(id);
         },
       }
     );
@@ -1388,8 +1398,58 @@ class SceneContentLogic {
     });
   }
 
-  
-  // ADD THIS NEW METHOD ***************
+  handleAlignmentModeSelect(mode: "world" | "free"): void {
+    if (mode === "world") {
+      this.updateState({
+        alignmentMode: "world",
+        alignmentStatus: "aligning",
+        showAlignmentPanel: false,
+        showAlignmentConfirm: true,
+      });
+    } else {
+      // Free roam mode - skip alignment
+      this.updateState({
+        alignmentMode: "free",
+        alignmentStatus: "aligned",
+        showAlignmentPanel: false,
+        showAlignmentConfirm: false,
+        showInstructions: true,
+        showSidebar: true,
+      });
+    }
+  }
+
+  handleAlignmentConfirm(): void {
+    this.updateState({
+      alignmentStatus: "aligned",
+      showAlignmentConfirm: false,
+      showInstructions: true,
+      showSidebar: true,
+    });
+  }
+
+  handleAlignmentCancel(): void {
+    this.updateState({
+      alignmentMode: null,
+      alignmentStatus: "pending",
+      showAlignmentConfirm: false,
+      showAlignmentPanel: true,
+    });
+  }
+
+  handleToggleAlignmentMode(): void {
+    if (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "world") {
+      this.updateState({
+        alignmentMode: "free",
+      });
+    } else if (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free") {
+      this.updateState({
+        alignmentMode: "world",
+        alignmentStatus: "aligning",
+        showAlignmentConfirm: true,
+      });
+    }
+  }
 
   handleSidebarItemSelect(itemId: string): void {
   this.updateState({ sidebarActiveItem: itemId });
@@ -1401,7 +1461,7 @@ class SceneContentLogic {
         showFurniture: false,
         showControlPanel: false,
         showSlider: false,
-        showRotationGizmo: false,  // HIDE ROTATION GIZMO
+        showRotationGizmo: false,
         showScalePanel: false,
       });
       
@@ -1414,20 +1474,14 @@ class SceneContentLogic {
           });
         }
       }
-      
-      console.log(`[SIDEBAR] Movement mode activated`, {
-        selectedItemId: this.state.selectedItemId,
-        showGizmo: !!this.state.selectedItemId
-      });
       break;
 
     case "rotation":
-      // CHANGED: Show rotation gizmo instead of notification
       if (this.state.selectedItemId) {
         const furniture = this.sceneManager?.getFurniture(this.state.selectedItemId);
         if (furniture) {
           this.updateState({ 
-            showRotationGizmo: true,  // SHOW ROTATION GIZMO
+            showRotationGizmo: true,
             rotationGizmoPosition: furniture.getPosition(),
             showFurniture: false,
             showControlPanel: false,
@@ -1454,7 +1508,6 @@ class SceneContentLogic {
           });
         }
       }
-      console.log(`[SIDEBAR] Scale mode activated`);
       break;
 
     case "settings":
@@ -1464,7 +1517,7 @@ class SceneContentLogic {
         showSlider: false,
         showInstructions: false,
         showTransformGizmo: false,
-        showRotationGizmo: false,  // HIDE ROTATION GIZMO
+        showRotationGizmo: false,
         showScalePanel: false,
       });
       break;
@@ -1476,7 +1529,7 @@ class SceneContentLogic {
         showSlider: false,
         showInstructions: false,
         showTransformGizmo: false,
-        showRotationGizmo: false,  // HIDE ROTATION GIZMO
+        showRotationGizmo: false,
         showScalePanel: false,
       });
       break;
@@ -1619,8 +1672,6 @@ class SceneContentLogic {
   }
 
 private handleFurnitureDeselect(id: string): void {
-  console.log(`[DESELECT] Furniture: ${id}`);
-  
   if (!this.sceneManager) return;
 
   this.sceneManager.deselectFurniture(id);
@@ -1633,7 +1684,6 @@ private handleFurnitureDeselect(id: string): void {
     rotationGizmoPosition: null,
     showScalePanel: false,
     sidebarActiveItem: null,
-    selectedItemWallMountable: false,
     selectedItemPlacementMode: 'floor',
   });
   this.currentAABBPosition = null;
@@ -1724,7 +1774,7 @@ private handleFurnitureDeselect(id: string): void {
   }
 
   handleSelectFurniture(f: any, camera: THREE.Camera): void {
-    if (!this.sceneManager) return;
+    if (!this.sceneManager || this.state.alignmentStatus !== "aligned") return;
 
     const catalogId = f.id;
     const allFurniture = this.sceneManager.getAllFurniture();
@@ -1750,7 +1800,6 @@ private handleFurnitureDeselect(id: string): void {
 
     const isWallMountable = f.wall_mountable || false;
     
-    // ALL items (including wall-mountable) spawn on the floor by default
     const spawnPos = this.sceneManager.calculateSpawnPosition(camera, 2);
     const initialRotation: [number, number, number] = [0, 0, 0];
 
@@ -1780,36 +1829,30 @@ private handleFurnitureDeselect(id: string): void {
 
     this.sceneManager.addFurniture(newFurniture).then(() => {
       this.sceneManager!.selectFurniture(uniqueId);
-      this.furnitureController?.setSelectedFurniture(uniqueId);
-      this.updateState({
-        selectedItemId: uniqueId,
-        rotationValue: initialRotation[1],
-        showSlider: true,
-        showFurniture: false,
-        selectedItemWallMountable: isWallMountable,
-        selectedItemPlacementMode: 'floor',
-      });
+      if (this.sceneManager!.selectFurniture(uniqueId)) {
+        this.furnitureController?.setSelectedFurniture(uniqueId);
+        this.updateState({
+          selectedItemId: uniqueId,
+          rotationValue: initialRotation[1],
+          showSlider: true,
+          showFurniture: false,
+          selectedItemPlacementMode: 'floor',
+        });
+      }
     });
   }
 
-  // MODIFIED METHOD ***********************
   handleSelectItem(id: string): void {
   if (!this.sceneManager) {
-    console.log("[handleSelectItem] No scene manager");
     return;
   }
 
-  console.log(`[handleSelectItem] Selected: ${id}, Currently selected: ${this.state.selectedItemId}`);
 
-  // If already selected and gizmo showing, don't deselect
   if (this.state.selectedItemId === id && (this.state.showTransformGizmo || this.state.showRotationGizmo)) {
-    console.log("[handleSelectItem] Same item already selected with gizmo showing - ignoring click");
     return;
   }
 
-  // If same item without gizmo, deselect
   if (this.state.selectedItemId === id && !this.state.showTransformGizmo && !this.state.showRotationGizmo) {
-    console.log("[handleSelectItem] Same item, no gizmo - deselecting");
     this.sceneManager.deselectFurniture(id);
     this.furnitureController?.setSelectedFurniture(null);
     this.updateState({
@@ -1819,7 +1862,6 @@ private handleFurnitureDeselect(id: string): void {
       gizmoPosition: null,
       showRotationGizmo: false,
       rotationGizmoPosition: null,
-      selectedItemWallMountable: false,
       selectedItemPlacementMode: 'floor',
     });
     return;
@@ -1851,17 +1893,7 @@ private handleFurnitureDeselect(id: string): void {
     const showRotGizmo = this.state.sidebarActiveItem === 'rotation';
 
     // Track wall-mountable state
-    const isWallMountable = furniture.isWallMountable();
     const placementMode = furniture.getPlacementMode();
-
-    console.log(`[handleSelectItem] ✅ Furniture selected:`, {
-      id,
-      movementMode: showMovementGizmo,
-      rotationMode: showRotGizmo,
-      position,
-      isWallMountable,
-      placementMode,
-    });
 
     this.updateState({
       selectedItemId: id,
@@ -1872,7 +1904,6 @@ private handleFurnitureDeselect(id: string): void {
       gizmoPosition: showMovementGizmo ? position : null,
       showRotationGizmo: showRotGizmo,
       rotationGizmoPosition: showRotGizmo ? position : null,
-      selectedItemWallMountable: isWallMountable,
       selectedItemPlacementMode: placementMode,
     });
   }
@@ -1897,7 +1928,6 @@ private handleFurnitureDeselect(id: string): void {
   const currentPos = furniture.getPosition();
   const newPos: [number, number, number] = [...currentPos];
 
-  // Apply delta
   switch (axis) {
     case 'x':
       newPos[0] += delta;
@@ -1910,21 +1940,13 @@ private handleFurnitureDeselect(id: string): void {
       break;
   }
 
-  console.log(`[handleGizmoMove] Moving along ${axis.toUpperCase()}:`, {
-    from: currentPos,
-    to: newPos,
-    delta: delta.toFixed(4),
-  });
-
   // Move furniture
   this.sceneManager.moveFurniture(this.state.selectedItemId, newPos, false, false)
     .then((result) => {
       if (result.success) {
-        console.log(`[handleGizmoMove] ✅ Move successful`);
         // Update gizmo position to match furniture
         this.updateState({ gizmoPosition: newPos });
       } else if (result.needsConfirmation) {
-        console.log(`[handleGizmoMove] ⚠️  Collision warning`);
         this.pendingMove = newPos;
         this.updateState({ showMoveCloserPanel: true });
       } else {
@@ -1955,7 +1977,6 @@ private handleFurnitureDeselect(id: string): void {
   const currentRot = furniture.getRotation();
   const newRot: [number, number, number] = [...currentRot];
 
-  // Apply delta to the appropriate axis
   switch (axis) {
     case 'x':
       newRot[0] += deltaRadians;
@@ -1968,13 +1989,6 @@ private handleFurnitureDeselect(id: string): void {
       break;
   }
 
-  console.log(`[handleGizmoRotate] Rotating around ${axis.toUpperCase()}:`, {
-    from: currentRot,
-    to: newRot,
-    deltaRadians: deltaRadians.toFixed(4),
-    deltaDegrees: (deltaRadians * 180 / Math.PI).toFixed(2),
-  });
-
   // Apply rotation
   this.sceneManager.rotateFurniture(this.state.selectedItemId, newRot);
 
@@ -1985,49 +1999,12 @@ private handleFurnitureDeselect(id: string): void {
   this.updateState({ rotationValue: normalizedRotation });
 }
 
-  // Toggle between floor and wall placement for wall-mountable items
-  handleToggleWallPlacement(camera: THREE.Camera): void {
-    if (!this.state.selectedItemId || !this.sceneManager) {
-      this.showNotificationMessage('Please select a furniture item first', 'info');
-      return;
-    }
-
-    const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
-    if (!furniture) return;
-
-    if (!furniture.isWallMountable()) {
-      this.showNotificationMessage('This item cannot be wall-mounted', 'info');
-      return;
-    }
-
-    const result = this.sceneManager.toggleWallPlacement(this.state.selectedItemId, camera);
-
-    if (result.success) {
-      const newPosition = furniture.getPosition();
-      
-      this.updateState({
-        selectedItemPlacementMode: result.placementMode,
-        gizmoPosition: this.state.showTransformGizmo ? newPosition : null,
-        rotationGizmoPosition: this.state.showRotationGizmo ? newPosition : null,
-      });
-
-      this.showNotificationMessage(
-        result.placementMode === 'wall' ? '📌 Item placed on wall' : '📦 Item placed on floor',
-        'success'
-      );
-    } else {
-      this.showNotificationMessage(result.message || 'Failed to toggle placement', 'error');
-    }
-  }
-
- handleScaleChange(newScale: number): void {
-  // Clamp between 0.5 and 3
+  handleScaleChange(newScale: number): void {
   const clampedScale = Math.max(0.5, Math.min(3, newScale));
   this.updateState({ sliderValue: clampedScale });
   
   if (this.state.selectedItemId && this.sceneManager) {
     this.sceneManager.scaleFurniture(this.state.selectedItemId, clampedScale);
-    console.log(`[SCALE] Furniture scaled to: ${clampedScale.toFixed(2)}x`);
   }
 }
 
@@ -2054,9 +2031,29 @@ private handleFurnitureDeselect(id: string): void {
   updateFrame(session: any, camera: THREE.Camera, delta: number): void {
     if (!session) return;
 
-    this.navigationController?.update(session, camera, delta);
+    // Set alignment mode in navigation controller
+    const isAligning = this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world";
+    if (this.navigationController) {
+      this.navigationController.setAlignmentMode(isAligning);
+      
+      if (isAligning && this.sceneManager?.getHomeModel()) {
+        this.navigationController.setHomeModelGroup(this.sceneManager.getHomeModel()!.getGroup());
+      } else {
+        this.navigationController.setHomeModelGroup(null);
+      }
+    }
 
-    if (!this.state.navigationMode && this.state.selectedItemId && this.furnitureController) {
+    const canNavigate = (this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world") ||
+                       (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free");
+    
+    if (canNavigate) {
+      this.navigationController?.update(session, camera, delta);
+    }
+
+    if (this.state.alignmentStatus === "aligned" && 
+        !this.state.navigationMode && 
+        this.state.selectedItemId && 
+        this.furnitureController) {
       this.furnitureController.update(session, camera, delta);
     }
 
@@ -2078,7 +2075,7 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
   const [state, setState] = useState<SceneState>({
     showSlider: false,
     showFurniture: false,
-    showInstructions: true,
+    showInstructions: false,
     showControlPanel: false,
     showNotification: false,
     notificationMessage: "",
@@ -2095,15 +2092,18 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
     rotationValue: 0,
     furnitureCatalog: [],
     catalogLoading: false,
-    showSidebar: true, //add
-    sidebarActiveItem: null, //add
-    showTransformGizmo: false, // ADD THIS
-    gizmoPosition: null, // ADD THIS
-    showRotationGizmo: false,  // ADD THIS
-    rotationGizmoPosition: null, // ADD THIS
+    showSidebar: false,
+    sidebarActiveItem: null,
+    showTransformGizmo: false,
+    gizmoPosition: null,
+    showRotationGizmo: false,
+    rotationGizmoPosition: null,
     showScalePanel: false,
-    selectedItemWallMountable: false,
     selectedItemPlacementMode: 'floor',
+    alignmentStatus: 'pending',
+    alignmentMode: null,
+    showAlignmentPanel: true,
+    showAlignmentConfirm: false,
   });
 
   const logicRef = useRef<SceneContentLogic | null>(null);
@@ -2160,6 +2160,7 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
   if (!logicRef.current) return null;
 
   const logic = logicRef.current;
+  const isAligned = state.alignmentStatus === "aligned";
   const uiLocked = state.showFurniture || 
     state.showControlPanel || 
     state.showInstructions || 
@@ -2167,7 +2168,9 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
     state.showNotification ||
     state.showMoveCloserPanel ||
     state.showScalePanel ||
-    state.showPreciseCheckPanel;
+    state.showPreciseCheckPanel ||
+    state.showAlignmentPanel ||
+    state.showAlignmentConfirm;
 
   if (state.loading) {
     return (
@@ -2205,23 +2208,12 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
               key={furniture.getId()}
               object={furniture.getGroup()}
               onClick={(e: any) => {
-                // LOG EVERY CLICK
-                console.log("[FURNITURE-CLICK] Click detected on:", e.object.name);
-
-                // CHECK IF GIZMO
                 let target = e.object;
                 let isGizmoClick = false;
                 let depth = 0;
 
                 while (target && depth < 10) {
-                  console.log(`[FURNITURE-CLICK] Checking object at depth ${depth}:`, {
-                    name: target.name,
-                    type: target.type,
-                    isGizmo: target.userData?.isGizmo,
-                  });
-
                   if (target.userData?.isGizmo) {
-                    console.log(`[FURNITURE-CLICK] ✅ FOUND GIZMO at depth ${depth}`);
                     isGizmoClick = true;
                     break;
                   }
@@ -2230,17 +2222,12 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
                   depth++;
                 }
 
-                // IF IT'S A GIZMO CLICK, IGNORE IT
                 if (isGizmoClick) {
-                  console.log("[FURNITURE-CLICK] ❌ This is a gizmo click - IGNORING");
                   e.stopPropagation();
-                  return; // Don't deselect
+                  return;
                 }
 
-                // OTHERWISE, NORMAL FURNITURE CLICK HANDLING
-                console.log("[FURNITURE-CLICK] ✅ This is a furniture click - normal handling");
-
-                if (!state.navigationMode && !uiLocked) {
+                if (state.alignmentStatus === "aligned" && !state.navigationMode && !uiLocked) {
                   e.stopPropagation();
                   logic.handleSelectItem(furniture.getId());
                 }
@@ -2273,8 +2260,27 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
       )}
     </group>
       
-      <CatalogToggle onToggle={() => logic.handleToggleUI()} />
-      <ControlPanelToggle onToggle={() => logic.handleToggleControlPanel()} />
+      {state.alignmentStatus === "aligned" && (
+        <>
+          <CatalogToggle onToggle={() => logic.handleToggleUI()} />
+          <ControlPanelToggle onToggle={() => logic.handleToggleControlPanel()} />
+        </>
+      )}
+
+      <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showAlignmentPanel}>
+        <VRAlignmentPanel 
+          show={state.showAlignmentPanel} 
+          onSelectMode={(mode) => logic.handleAlignmentModeSelect(mode)} 
+        />
+      </HeadLockedUI>
+
+      <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showAlignmentConfirm}>
+        <VRAlignmentConfirmPanel 
+          show={state.showAlignmentConfirm} 
+          onConfirm={() => logic.handleAlignmentConfirm()} 
+          onCancel={() => logic.handleAlignmentCancel()} 
+        />
+      </HeadLockedUI>
 
       <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showInstructions}>
         <VRInstructionPanel 
@@ -2304,6 +2310,8 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
           onLogout={() => logic.handleLogout()}
           saving={state.saving}
           onClose={() => logic.updateState({ showControlPanel: false })}
+          alignmentMode={state.alignmentMode}
+          onToggleAlignment={() => logic.handleToggleAlignmentMode()}
         />
       </HeadLockedUI>
 
@@ -2356,9 +2364,6 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
           <VRSidebar
             show={state.showSidebar}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
-            showWallToggle={state.selectedItemWallMountable && state.selectedItemId !== null}
-            isOnWall={state.selectedItemPlacementMode === 'wall'}
-            onWallToggle={() => logic.handleToggleWallPlacement(camera)}
           />
         </group>
       </HeadLockedUI>
