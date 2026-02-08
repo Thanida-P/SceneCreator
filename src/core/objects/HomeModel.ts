@@ -146,6 +146,28 @@ export class HomeModel extends Base3DObject {
     return this.boundingBox?.max.y || 3;
   }
 
+  private isTransparent: boolean = false;
+ 
+  setTransparent(transparent: boolean): void {
+    if (this.isTransparent === transparent) return;
+    this.isTransparent = transparent;
+
+    this.group.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const mat of materials) {
+        mat.transparent = true;
+        mat.opacity = transparent ? 0.0 : 1.0;  // home model opacity
+        mat.needsUpdate = true;
+      }
+    }
+  });
+  }
+ 
+  getIsTransparent(): boolean {
+    return this.isTransparent;
+  }
+
   serialize(): Record<string, unknown> {
     return {
       id: this.id,
