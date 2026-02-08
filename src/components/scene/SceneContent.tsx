@@ -409,6 +409,9 @@ class SceneContentLogic {
 
   handleAlignmentModeSelect(mode: "world" | "free"): void {
     if (mode === "world") {
+      if (this.state.homeTransparent) {
+        this.sceneManager?.getHomeModel()?.setOpacity(0.3);
+      }
       this.updateState({
         alignmentMode: "world",
         alignmentStatus: "aligning",
@@ -417,6 +420,9 @@ class SceneContentLogic {
       });
     } else {
       // Free roam mode - skip alignment
+      if (this.state.homeTransparent) {
+        this.sceneManager?.getHomeModel()?.setOpacity(0.0);
+      }
       this.updateState({
         alignmentMode: "free",
         alignmentStatus: "aligned",
@@ -429,6 +435,9 @@ class SceneContentLogic {
   }
 
   handleAlignmentConfirm(): void {
+    if (this.state.homeTransparent) {
+      this.sceneManager?.getHomeModel()?.setOpacity(0.0);
+    }
     this.updateState({
       alignmentStatus: "aligned",
       showAlignmentConfirm: false,
@@ -438,6 +447,9 @@ class SceneContentLogic {
   }
 
   handleAlignmentCancel(): void {
+    if (this.state.homeTransparent) {
+      this.sceneManager?.getHomeModel()?.setOpacity(0.0);
+    }
     this.updateState({
       alignmentMode: null,
       alignmentStatus: "pending",
@@ -448,10 +460,16 @@ class SceneContentLogic {
 
   handleToggleAlignmentMode(): void {
     if (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "world") {
+      if (this.state.homeTransparent) {
+        this.sceneManager?.getHomeModel()?.setOpacity(0.0);
+      }
       this.updateState({
         alignmentMode: "free",
       });
     } else if (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free") {
+      if (this.state.homeTransparent) {
+        this.sceneManager?.getHomeModel()?.setOpacity(0.3);
+      }
       this.updateState({
         alignmentMode: "world",
         alignmentStatus: "aligning",
@@ -1149,7 +1167,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
  
   useEffect(() => {
     if (!xr.session || !logicRef.current || !arModeRequested) return;
-
+ 
     const homeModel = logicRef.current.sceneManager?.getHomeModel();
     if (homeModel && !homeModel.getIsTransparent()) {
       homeModel.setTransparent(true);
