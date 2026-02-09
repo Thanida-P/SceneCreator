@@ -21,6 +21,7 @@ export function AlignmentLineVisualization({
 }: AlignmentLineVisualizationProps) {
   const lineGroupRef = React.useRef<THREE.Group>(null);
   const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
   const [currentDepth, setCurrentDepth] = React.useState(targetDepth);
   const [hitPoint, setHitPoint] = React.useState<THREE.Vector3 | null>(null);
   const hitTestSourceRef = React.useRef<XRHitTestSource | null>(null);
@@ -82,7 +83,8 @@ export function AlignmentLineVisualization({
         
         if (hitTestResults && hitTestResults.length > 0) {
           const hit = hitTestResults[0];
-          const pose = hit.getPose(viewerSpaceRef.current);
+          const referenceSpace = gl.xr.getReferenceSpace();
+          const pose = referenceSpace ? hit.getPose(referenceSpace) : hit.getPose(viewerSpaceRef.current);
           
           if (pose) {
             const xrMatrix = new THREE.Matrix4().fromArray(pose.transform.matrix);
