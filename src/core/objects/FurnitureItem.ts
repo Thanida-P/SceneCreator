@@ -37,9 +37,11 @@ export class FurnitureItem extends Base3DObject {
     modelId: number,
     modelPath: string | null,
     metadata: FurnitureMetadata = {},
-    initialTransform?: Partial<Transform>
+    initialTransform?: Partial<Transform>,
+    type?: string,
+    image?: string
   ) {
-    super(id, name, modelId, modelPath, initialTransform);
+    super(id, name, modelId, modelPath, initialTransform, type, image);
     this.metadata = metadata;
     this.loader = new GLTFLoader();
   }

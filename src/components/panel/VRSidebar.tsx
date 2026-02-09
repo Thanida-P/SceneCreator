@@ -35,6 +35,20 @@ const baseSidebarItems: SidebarItemData[] = [
     description: "Resize objects",
   },
   {
+    id: "environment",
+    icon: "🏠",
+    label: "Environment",
+    color: "#06B6D4",
+    description: "Home textures",
+  },
+  {
+    id: "texture",
+    icon: "🎨",
+    label: "Texture",
+    color: "#F97316",
+    description: "Change texture",
+  },
+  {
     id: "settings",
     icon: "⚙",
     label: "Settings",
@@ -185,9 +199,9 @@ export function VRSidebar({
   const sidebarHeight = 0.25 + sidebarItems.length * 0.25;
 
   return (
-    <group position={[-0.8, 0, 0]}>
+    <group position={[0.01, 0, 0]}>
       {/* Sidebar Background */}
-      <mesh position={[0, 0, -0.01]}>
+      <mesh position={[0.01, 0, -0.01]}>
         <GradientBackground
           width={SIDEBAR_WIDTH}
           height={sidebarHeight}
@@ -203,7 +217,7 @@ export function VRSidebar({
         <SidebarItem
           key={item.id}
           item={item}
-          yPos={0.5 - index * 0.25}
+          yPos={0.8 - index * 0.25}
           isActive={activeItem === item.id}
           isHovered={hoveredItem === item.id}
           onHover={setHoveredItem}
