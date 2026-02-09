@@ -66,12 +66,12 @@ interface SceneState {
   rotationValue: number;
   furnitureCatalog: any[];
   catalogLoading: boolean;
-  showSidebar: boolean; //add
-  sidebarActiveItem: string | null; //add
-  showTransformGizmo: boolean; // ADD THIS
-  gizmoPosition: [number, number, number] | null; // ADD THIS
-  showRotationGizmo: boolean;  // ADD THIS
-  rotationGizmoPosition: [number, number, number] | null; // ADD THIS
+  showSidebar: boolean; 
+  sidebarActiveItem: string | null; 
+  showTransformGizmo: boolean; 
+  gizmoPosition: [number, number, number] | null; 
+  showRotationGizmo: boolean;  
+  rotationGizmoPosition: [number, number, number] | null; 
   showScalePanel: boolean;
   selectedItemWallMountable: boolean;
   selectedItemPlacementMode: 'floor' | 'wall';
@@ -92,17 +92,17 @@ class SceneContentLogic {
   private homeId: string;
   private navigate: (path: string) => void;
   
-  // Managers
+ 
   public sceneManager: SceneManager | null = null;
   public navigationController: NavigationController | null = null;
   public furnitureController: FurnitureEditController | null = null;
   
-  // Refs
+
   public pendingMove: [number, number, number] | null = null;
   public currentAABBPosition: [number, number, number] | null = null;
   public modelUrlCache: Map<number, string> = new Map();
 
-  //add 
+
   private textureCache: Map<string, TextureOption[]> = new Map();
   private textureLoadingCache: Map<string, Promise<void>> = new Map();
 
@@ -230,11 +230,10 @@ cleanup(): void {
   this.furnitureController?.reset();
   this.modelUrlCache.forEach(url => URL.revokeObjectURL(url));
   
-  // Clear texture caches
+
   this.textureCache.clear();
   this.textureLoadingCache.clear();
-  
-  // ADD THESE: Clear environment texture URLs
+
   this.state.floorTextures.forEach(tex => {
     if (tex.imagePath) URL.revokeObjectURL(tex.imagePath);
   });
@@ -454,18 +453,17 @@ private async _fetchTexturesFromAPI(model_id: number, cacheKey: string): Promise
     
           const blob = new Blob([bytes], { type: 'image/jpeg' });
           
-          // Step 5: Create blob URL
+         
           const blobUrl = URL.createObjectURL(blob);
           
-          // ✅ KEY FIX: LOAD THE TEXTURE INTO THREE IMMEDIATELY
-          // Don't wait for the panel component to load it
+     
           const textureLoader = new THREE.TextureLoader();
           const three3DTexture = await new Promise<THREE.Texture>((resolve, reject) => {
             textureLoader.load(
               blobUrl,
               (loadedTexture) => {
                 
-                // Configure the texture
+         
                 loadedTexture.wrapS = THREE.RepeatWrapping;
                 loadedTexture.wrapT = THREE.RepeatWrapping;
                 loadedTexture.magFilter = THREE.LinearFilter;
@@ -482,13 +480,13 @@ private async _fetchTexturesFromAPI(model_id: number, cacheKey: string): Promise
             );
           });
           
-          // ✅ Store the THREE.Texture object directly
+      
           textures.push({
             id: `texture-${texture.texture_id}`,
             name: `Texture ${index + 1}`,
-            imagePath: blobUrl, // Keep the URL as backup
+            imagePath: blobUrl, 
             color: '#ffffff',
-            // ✅ NEW: Store the actual THREE.Texture
+          
             threeTexture: three3DTexture,
           });
           
@@ -500,14 +498,14 @@ private async _fetchTexturesFromAPI(model_id: number, cacheKey: string): Promise
       textureLoaders.push(loadPromise);
     }
     
-    // ✅ Wait for ALL textures to load before updating state
+  
    
     await Promise.all(textureLoaders);
     
-    // ✅ Cache the results
+ 
     this.textureCache.set(cacheKey, textures);
     
-    // ✅ Update UI ONLY when all textures are loaded and ready
+
     this.updateState({
       textureOptions: textures,
       selectedFurnitureTextureId: undefined,
@@ -524,9 +522,7 @@ private async _fetchTexturesFromAPI(model_id: number, cacheKey: string): Promise
   }
 }
 
-/**
- * Show texture panel for selected furniture
- */
+
 handleShowTextures(): void {
   if (!this.state.selectedItemId) {
     this.showNotificationMessage("Please select a furniture item first", "info");
@@ -543,9 +539,7 @@ handleShowTextures(): void {
   });
 }
 
-/**
- * Apply selected texture to furniture
- */
+
 async handleSelectTexture(textureId: string, texturePath: string): Promise<void> {
   if (!this.state.selectedItemId || !this.sceneManager) return;
 
@@ -553,33 +547,30 @@ async handleSelectTexture(textureId: string, texturePath: string): Promise<void>
     const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
     if (!furniture) return;
 
-    // Load the texture
     const textureLoader = new THREE.TextureLoader();
     const texture = await new Promise<THREE.Texture>((resolve, reject) => {
       textureLoader.load(texturePath, resolve, undefined, reject);
     });
 
-    // ✅ FIX: Configure texture wrapping and repeat
+ 
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     
-    // Adjust these values based on your model size
-    // Higher numbers = more repetition (smaller texture tiles)
-    // Lower numbers = less repetition (larger texture tiles)
-    texture.repeat.set(20, 20); // Try values like (1,1), (2,2), (4,4)
     
-    // ✅ FIX: Add better texture filtering for quality
+    texture.repeat.set(20, 20); 
+    
+    
     texture.minFilter = THREE.LinearMipmapLinearFilter;
     texture.magFilter = THREE.LinearFilter;
-    texture.anisotropy = 16; // Maximum quality (adjust based on performance)
+    texture.anisotropy = 16; 
     
     texture.needsUpdate = true;
 
-    // Apply to all meshes in the furniture group
+  
     const group = furniture.getGroup();
     group.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {
-        // Clone material to avoid affecting other instances
+
         const material = child.material.clone();
         material.map = texture;
         material.needsUpdate = true;
@@ -587,7 +578,7 @@ async handleSelectTexture(textureId: string, texturePath: string): Promise<void>
       }
     });
 
-    // Update state
+ 
     this.updateState({
       selectedFurnitureTextureId: textureId,
     });
@@ -598,9 +589,7 @@ async handleSelectTexture(textureId: string, texturePath: string): Promise<void>
   }
 }
 
-/**
- * Close texture panel
- */
+
 handleCloseTexturePanel(): void {
   this.updateState({ showTexturePanel: false });
 }
@@ -610,9 +599,9 @@ handleCloseTexturePanel(): void {
 async loadEnvironmentTextures(): Promise<void> {
   this.updateState({ loadingEnvironment: true });
   try {
-    // Load floor textures
+
     const floorResponse = await makeAuthenticatedRequest(
-      `/digitalhomes/get_textures/${this.homeId}` // Adjust endpoint as needed
+      `/digitalhomes/get_textures/${this.homeId}` 
     );
     
     if (floorResponse.ok) {
@@ -624,9 +613,9 @@ async loadEnvironmentTextures(): Promise<void> {
       this.updateState({ floorTextures });
     }
 
-    // Load wall textures
+
     const wallResponse = await makeAuthenticatedRequest(
-      `/digitalhomes/get_textures/${this.homeId}` // Adjust endpoint as needed
+      `/digitalhomes/get_textures/${this.homeId}` 
     );
     
     if (wallResponse.ok) {
@@ -657,27 +646,25 @@ private async processEnvironmentTextures(
     
     const loadPromise = (async () => {
       try {
-        // Step 1: Get base64 string
+     
         const base64String = texture.file;
         
-        // Step 2: Decode base64 to binary string
+ 
         const binaryString = atob(base64String);
         
-        // Step 3: Convert binary string to bytes
+   
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
         
-        // Step 4: Create blob
+    
         const blob = new Blob([bytes], { type: 'image/jpeg' });
         
-        // Step 5: Create blob URL
+   
         const blobUrl = URL.createObjectURL(blob);
         
        
-
-        // Step 6: Load texture into THREE.Texture object
         const textureLoader = new THREE.TextureLoader();
         const three3DTexture = await new Promise<THREE.Texture>((resolve, reject) => {
           textureLoader.load(
@@ -695,7 +682,7 @@ private async processEnvironmentTextures(
           );
         });
 
-        // Step 7: Store the processed texture
+
         processedTextures.push({
           id: `${type}-texture-${texture.texture_id}`,
           name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${index + 1}`,
@@ -712,7 +699,7 @@ private async processEnvironmentTextures(
     textureLoaders.push(loadPromise);
   }
 
-  // IMPORTANT: Wait for ALL textures to finish loading
+
   await Promise.all(textureLoaders);
   
   return processedTextures;
@@ -749,11 +736,9 @@ async handleSelectFloorTexture(textureId: string, texturePath: string): Promise<
         let floorCount = 0;
         homeModel.getGroup().traverse((child) => {
           if (child instanceof THREE.Mesh && child.material) {
-            // Match EXACT name "Floor" or names containing "Floor"
+         
             if (child.name === 'Floor' || child.name.includes('Floor')) {
               
-              
-              // Clone material to avoid affecting other instances
               const material = Array.isArray(child.material) 
                 ? child.material.map(m => m.clone())
                 : child.material.clone();
@@ -825,11 +810,9 @@ async handleSelectWallTexture(textureId: string, texturePath: string): Promise<v
         let wallCount = 0;
         homeModel.getGroup().traverse((child) => {
           if (child instanceof THREE.Mesh && child.material) {
-            // Match EXACT name "Wall" or names containing "Wall"
+         
             if (child.name === 'Wall' || child.name.includes('Wall')) {
              
-              
-              // Clone material to avoid affecting other instances
               const material = Array.isArray(child.material) 
                 ? child.material.map(m => m.clone())
                 : child.material.clone();
@@ -956,8 +939,6 @@ debugHomeModelStructure(): void {
     });
   }
 
-  
-  // ADD THIS NEW METHOD ***************
 
   handleSidebarItemSelect(itemId: string): void {
   this.updateState({ sidebarActiveItem: itemId });
@@ -969,7 +950,7 @@ debugHomeModelStructure(): void {
         showFurniture: false,
         showControlPanel: false,
         showSlider: false,
-        showRotationGizmo: false,  // HIDE ROTATION GIZMO
+        showRotationGizmo: false,  
         showScalePanel: false,
         showTexturePanel: false,
         showEnvironmentPanel: false,  
@@ -988,12 +969,12 @@ debugHomeModelStructure(): void {
       break;
 
     case "rotation":
-      // CHANGED: Show rotation gizmo instead of notification
+    
       if (this.state.selectedItemId) {
         const furniture = this.sceneManager?.getFurniture(this.state.selectedItemId);
         if (furniture) {
           this.updateState({ 
-            showRotationGizmo: true,  // SHOW ROTATION GIZMO
+            showRotationGizmo: true,  
             rotationGizmoPosition: furniture.getPosition(),
             showFurniture: false,
             showControlPanel: false,
@@ -1027,14 +1008,14 @@ debugHomeModelStructure(): void {
       break;
 
     case "environment":
-      // NEW CASE: Show environment panel
+      
       if (this.state.floorTextures.length === 0 && this.state.wallTextures.length === 0) {
-        // Load textures if not already loaded
+    
         this.loadEnvironmentTextures();
       }
        this.updateState({
-          showEnvironmentPanel: true,      // ✅ Show environment panel
-          showFurniture: false,            // ✅ Hide everything else
+          showEnvironmentPanel: true,      
+          showFurniture: false,           
           showControlPanel: false,
           showTransformGizmo: false,
           showRotationGizmo: false,
@@ -1047,9 +1028,9 @@ debugHomeModelStructure(): void {
 
 
     case "texture":
-      // Enter "texture selection mode" - don't show panel yet
+    
       this.updateState({
-        sidebarActiveItem: "texture",  // Mark texture mode as active
+        sidebarActiveItem: "texture", 
         showFurniture: false,
         showControlPanel: false,
         showTransformGizmo: false,
@@ -1058,10 +1039,9 @@ debugHomeModelStructure(): void {
         showEnvironmentPanel: false,
         showInstructions: false,
         showSlider: false,
-        showTexturePanel: false,  // DON'T show panel yet
+        showTexturePanel: false,  
       });
       
-      // If furniture is already selected, load textures and show panel
       if (this.state.selectedItemId) {
         this.loadTexturesForFurniture(this.state.selectedItemId).then(() => {
           const hasTextures = this.state.textureOptions && this.state.textureOptions.length > 0;
@@ -1074,7 +1054,7 @@ debugHomeModelStructure(): void {
           });
         });
       } else {
-        // No furniture selected yet - show helpful message
+     
         this.showNotificationMessage("Texture mode: Click on furniture to change texture", "info");
       }
      
@@ -1087,7 +1067,7 @@ debugHomeModelStructure(): void {
         showSlider: false,
         showInstructions: false,
         showTransformGizmo: false,
-        showRotationGizmo: false,  // HIDE ROTATION GIZMO
+        showRotationGizmo: false,  
         showScalePanel: false,
         showTexturePanel: false,
         showEnvironmentPanel: false,    
@@ -1102,7 +1082,7 @@ debugHomeModelStructure(): void {
         showSlider: false,
         showInstructions: false,
         showTransformGizmo: false,
-        showRotationGizmo: false,  // HIDE ROTATION GIZMO
+        showRotationGizmo: false,  
         showScalePanel: false,
         showTexturePanel: false,
         showEnvironmentPanel: false,    
@@ -1382,7 +1362,7 @@ private handleFurnitureDeselect(id: string): void {
 
     const isWallMountable = f.wall_mountable || false;
     
-    // ALL items (including wall-mountable) spawn on the floor by default
+   
     const spawnPos = this.sceneManager.calculateSpawnPosition(camera, 2);
     const initialRotation: [number, number, number] = [0, 0, 0];
 
@@ -1422,23 +1402,18 @@ private handleFurnitureDeselect(id: string): void {
     });
   }
 
-  // MODIFIED METHOD ***********************
-  // MODIFIED METHOD ***********************
+
 handleSelectItem(id: string): void {
   if (!this.sceneManager) {
    
     return;
   }
   
-  
-  
-  // If already selected and gizmo showing, don't deselect
   if (this.state.selectedItemId === id && (this.state.showTransformGizmo || this.state.showRotationGizmo)) {
   
   return;
 }
   
-  // If same item without gizmo, deselect
   if (this.state.selectedItemId === id && !this.state.showTransformGizmo && !this.state.showRotationGizmo) {
     
     this.sceneManager.deselectFurniture(id);
@@ -1452,18 +1427,16 @@ handleSelectItem(id: string): void {
       rotationGizmoPosition: null,
       selectedItemWallMountable: false,
       selectedItemPlacementMode: 'floor',
-      showTexturePanel: false, // Close texture panel on deselect
+      showTexturePanel: false, 
     });
     return;
   }
   
-  // Deselect previous item
   if (this.state.selectedItemId) {
    
     this.sceneManager.deselectFurniture(this.state.selectedItemId);
   }
   
-  // Select new item
   
   this.sceneManager.selectFurniture(id);
   this.furnitureController?.setSelectedFurniture(id);
@@ -1480,18 +1453,14 @@ handleSelectItem(id: string): void {
     
     const scaleValue = typeof scale === 'number' ? scale : scale[0];
     
-    // Show gizmo based on current sidebar mode
     const showMovementGizmo = this.state.sidebarActiveItem === 'movement';
     const showRotGizmo = this.state.sidebarActiveItem === 'rotation';
     const isTextureMode = this.state.sidebarActiveItem === 'texture';
     
-    // Track wall-mountable state
     const isWallMountable = furniture.isWallMountable();
     const placementMode = furniture.getPlacementMode();
     
-    // ============================================
-    // ✅ FIX: FIRST update basic state
-    // ============================================
+  
     this.updateState({
       selectedItemId: id,
       showSlider: !showMovementGizmo && !showRotGizmo && !isTextureMode,  
@@ -1503,9 +1472,9 @@ handleSelectItem(id: string): void {
       rotationGizmoPosition: showRotGizmo ? position : null,
       selectedItemWallMountable: isWallMountable,
       selectedItemPlacementMode: placementMode,
-      // DO NOT show panel yet!
+   
       showTexturePanel: false,
-      textureOptions: [], // Reset texture options
+      textureOptions: [],
     });
 
     if (isTextureMode) {
@@ -1546,7 +1515,7 @@ handleSelectItem(id: string): void {
   const currentPos = furniture.getPosition();
   const newPos: [number, number, number] = [...currentPos];
 
-  // Apply delta
+
   switch (axis) {
     case 'x':
       newPos[0] += delta;
@@ -1559,12 +1528,12 @@ handleSelectItem(id: string): void {
       break;
   }
 
-  // Move furniture
+
   this.sceneManager.moveFurniture(this.state.selectedItemId, newPos, false, false)
     .then((result) => {
       if (result.success) {
         
-        // Update gizmo position to match furniture
+ 
         this.updateState({ gizmoPosition: newPos });
       } else if (result.needsConfirmation) {
         
@@ -1598,7 +1567,6 @@ handleSelectItem(id: string): void {
   const currentRot = furniture.getRotation();
   const newRot: [number, number, number] = [...currentRot];
 
-  // Apply delta to the appropriate axis
   switch (axis) {
     case 'x':
       newRot[0] += deltaRadians;
@@ -1611,17 +1579,14 @@ handleSelectItem(id: string): void {
       break;
   }
 
-  // Apply rotation
   this.sceneManager.rotateFurniture(this.state.selectedItemId, newRot);
 
-  // Update rotation state
   const twoPi = Math.PI * 2;
   let normalizedRotation = newRot[1] % twoPi;
   if (normalizedRotation < 0) normalizedRotation += twoPi;
   this.updateState({ rotationValue: normalizedRotation });
 }
 
-  // Toggle between floor and wall placement for wall-mountable items
   handleToggleWallPlacement(camera: THREE.Camera): void {
     if (!this.state.selectedItemId || !this.sceneManager) {
       this.showNotificationMessage('Please select a furniture item first', 'info');
@@ -1657,7 +1622,7 @@ handleSelectItem(id: string): void {
   }
 
  handleScaleChange(newScale: number): void {
-  // Clamp between 0.5 and 3
+
   const clampedScale = Math.max(0.5, Math.min(3, newScale));
   this.updateState({ sliderValue: clampedScale });
   
@@ -1696,7 +1661,6 @@ handleSelectItem(id: string): void {
       this.furnitureController.update(session, camera, delta);
     }
 
-    // Update furniture animations
     this.sceneManager?.updateAnimations(delta);
   }
 
@@ -1704,17 +1668,12 @@ handleSelectItem(id: string): void {
 }
 
 
-
-
-
-// Wrapper for R3F hooks
 export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
   const navigate = useNavigate();
   const { scene, camera } = useThree();
   const xr = useXR();
   const xrStore = useXRStore();
 
-  // State management
   const [state, setState] = useState<SceneState>({
     showSlider: false,
     showFurniture: false,
@@ -1735,12 +1694,12 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
     rotationValue: 0,
     furnitureCatalog: [],
     catalogLoading: false,
-    showSidebar: true, //add
-    sidebarActiveItem: null, //add
-    showTransformGizmo: false, // ADD THIS
-    gizmoPosition: null, // ADD THIS
-    showRotationGizmo: false,  // ADD THIS
-    rotationGizmoPosition: null, // ADD THIS
+    showSidebar: true, 
+    sidebarActiveItem: null, 
+    showTransformGizmo: false, 
+    gizmoPosition: null, 
+    showRotationGizmo: false,  
+    rotationGizmoPosition: null, 
     showScalePanel: false,
     selectedItemWallMountable: false,
     selectedItemPlacementMode: 'floor',
@@ -1778,19 +1737,18 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
     logicRef.current.setupXRRig(scene, camera);
   }, [xr.session, scene, camera]);
 
-  // Load home
+
   useEffect(() => {
     if (!logicRef.current) return;
     logicRef.current.loadHome(digitalHome);
   }, [homeId, digitalHome]);
 
-  // Load furniture catalog
   useEffect(() => {
     if (!logicRef.current) return;
     logicRef.current.loadFurnitureCatalog();
   }, []);
 
-  // Load deployed items
+
   useEffect(() => {
     if (!logicRef.current || logicRef.current.modelUrlCache.size === 0) return;
     logicRef.current.loadDeployedItems();
@@ -1854,10 +1812,7 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
               key={furniture.getId()}
               object={furniture.getGroup()}
               onClick={(e: any) => {
-                // LOG EVERY CLICK
-               
-
-                // CHECK IF GIZMO
+             
                 let target = e.object;
                 let isGizmoClick = false;
                 let depth = 0;
@@ -1879,11 +1834,11 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
                   depth++;
                 }
 
-                // IF IT'S A GIZMO CLICK, IGNORE IT
+          
                 if (isGizmoClick) {
                  
                   e.stopPropagation();
-                  return; // Don't deselect
+                  return; 
                 }
 
                 if (!state.navigationMode && !uiLocked) {
@@ -1902,7 +1857,7 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
             />
           )}
 
-          {/* ROTATION GIZMO FOR ROTATION */}
+       
           {state.showRotationGizmo && state.rotationGizmoPosition && (
             <RotationGizmo
               position={state.rotationGizmoPosition}
@@ -1998,7 +1953,7 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
       </HeadLockedUI>
 
       <HeadLockedUI distance={1.4} verticalOffset={0} enabled={state.showSidebar}>
-        <group position={[-0.8, 0, 0]}> {/* Offset to the left within head-locked space */}
+        <group position={[-0.8, 0, 0]}> 
           <VRSidebar
             show={state.showSidebar}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
@@ -2010,7 +1965,7 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
       </HeadLockedUI>
 
       <HeadLockedUI distance={1.3} verticalOffset={0} enabled={state.showTexturePanel}>
-        <group position={[1, 0, 0]}> {/* Move RIGHT - positive X */}
+        <group position={[1, 0, 0]}> 
           <TextureSelectorPanel
             show={state.showTexturePanel}
             onSelectTexture={(id, path) => logic.handleSelectTexture(id, path)}
