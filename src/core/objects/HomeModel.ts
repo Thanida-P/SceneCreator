@@ -171,6 +171,10 @@ export class HomeModel extends Base3DObject {
     return this.isTransparent;
   }
 
+  setVisible(visible: boolean): void {
+    this.group.visible = visible;
+  }
+
   serialize(): Record<string, unknown> {
     return {
       id: this.id,

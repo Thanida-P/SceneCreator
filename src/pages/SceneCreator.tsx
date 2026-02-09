@@ -38,6 +38,7 @@ export function SceneCreator() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [arModeRequested, setArModeRequested] = useState(false);
+  const [canvasKey, setCanvasKey] = useState(0); // Key to force Canvas remount if needed
 
   useEffect(() => {
     if (!homeId) {
@@ -105,29 +106,129 @@ export function SceneCreator() {
         flexDirection: 'column',
       }}>
         <h2 style={{ color: '#f87171', marginBottom: '1rem' }}>Error Loading Scene</h2>
-        <p style={{ marginBottom: '2rem' }}>{error || 'Digital home not found'}</p>
-        <button
-          onClick={() => navigate('/')}
-          style={{
-            padding: '0.75rem 1.5rem',
-            background: '#3b82f6',
-            border: 'none',
-            borderRadius: '8px',
-            color: '#1e293b',
-            cursor: 'pointer',
-            fontSize: '1rem',
-          }}
-        >
-          ← Back to Home
-        </button>
+        <p style={{ marginBottom: '2rem', maxWidth: '500px', textAlign: 'center' }}>
+          {error || 'Digital home not found'}
+        </p>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          {error && error.includes('WebGL') && (
+            <button
+              onClick={() => {
+                setError(null);
+                setCanvasKey(prev => prev + 1);
+                window.location.reload();
+              }}
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: '#3b82f6',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '1rem',
+              }}
+            >
+              Retry / Refresh
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/')}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: error && error.includes('WebGL') ? '#6b7280' : '#3b82f6',
+              border: 'none',
+              borderRadius: '8px',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '1rem',
+            }}
+          >
+            ← Back to Home
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
-      <Canvas style={{ width: "100vw", height: "100vh", position: "fixed" }}>
-        <XR store={xrStore}>
+      <Canvas 
+        key={canvasKey}
+        style={{ 
+          width: "100vw", 
+          height: "100vh", 
+          position: "fixed",
+          backgroundColor: arModeRequested ? 'transparent' : '#808080'
+        }}
+        gl={{ 
+          alpha: true, 
+          antialias: true, 
+          preserveDrawingBuffer: true,
+          premultipliedAlpha: false,
+          powerPreference: "high-performance",
+          failIfMajorPerformanceCaveat: false,
+          stencil: false,
+          depth: true
+        }}
+        onCreated={({ gl }) => {
+          // Handle WebGL context loss
+          const handleContextLost = (event: Event) => {
+            event.preventDefault();
+            console.warn('WebGL context lost, attempting to restore...');
+            setError('WebGL context lost. Please refresh the page.');
+            
+            // Try to restore context after a delay
+            setTimeout(() => {
+              try {
+                // Check if context is still lost
+                const canvas = gl.domElement;
+                const context = canvas.getContext('webgl2') || canvas.getContext('webgl');
+                if (!context || context.isContextLost()) {
+                  // Force page reload if context cannot be restored
+                  console.warn('Context cannot be restored, reloading page...');
+                  window.location.reload();
+                }
+              } catch (err) {
+                console.error('Failed to restore context:', err);
+                // Reload page as last resort
+                window.location.reload();
+              }
+            }, 2000);
+          };
+
+          const handleContextRestored = () => {
+            console.log('WebGL context restored');
+            setError(null);
+            // Reset canvas key to force remount if needed
+            setCanvasKey(prev => prev + 1);
+          };
+
+          // Add event listeners
+          const canvas = gl.domElement;
+          canvas.addEventListener('webglcontextlost', handleContextLost);
+          canvas.addEventListener('webglcontextrestored', handleContextRestored);
+
+          // Cleanup on unmount
+          return () => {
+            canvas.removeEventListener('webglcontextlost', handleContextLost);
+            canvas.removeEventListener('webglcontextrestored', handleContextRestored);
+          };
+        }}
+        onError={(error) => {
+          console.error('Canvas error:', error);
+          setError('Failed to initialize 3D renderer. Please refresh the page.');
+        }}
+      >
+        <XR 
+          store={xrStore} 
+          sessionInit={arModeRequested ? {
+            mode: 'immersive-ar',
+            requiredFeatures: ['local-floor'],
+            optionalFeatures: ['bounded-floor', 'hand-tracking', 'layers']
+            // Note: 'dom-overlay' is not supported in AR mode, so we don't include it
+          } : {
+            optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
+          }}
+        >
           {homeId && <SceneContent homeId={homeId} digitalHome={digitalHome} arModeRequested={arModeRequested} />}
         </XR>
       </Canvas>
@@ -169,9 +270,43 @@ export function SceneCreator() {
               cursor: "pointer",
               pointerEvents: "auto"
             }}
-            onClick={() => {
-              setArModeRequested(true);
-              xrStore.enterVR().catch((err) => console.warn("Failed to enter VR:", err));
+            onClick={async () => {
+              try {
+                // Check if AR is supported first
+                if (navigator.xr && (navigator.xr as any).isSessionSupported) {
+                  const isARSupported = await (navigator.xr as any).isSessionSupported('immersive-ar');
+                  
+                  if (isARSupported) {
+                    // End current session if exists
+                    const currentSession = xrStore.getState().session;
+                    if (currentSession) {
+                      await currentSession.end();
+                      // Wait for session to fully end
+                      await new Promise(resolve => setTimeout(resolve, 300));
+                    }
+                    
+                    // Set AR mode requested flag - ARSessionHandler component will handle the session creation
+                    setArModeRequested(true);
+                    console.log('AR mode requested - session will be initialized by ARSessionHandler');
+                  } else {
+                    console.warn('AR not supported, falling back to VR');
+                    setArModeRequested(false);
+                    await xrStore.enterVR();
+                  }
+                } else {
+                  console.warn('XR not available');
+                  setArModeRequested(false);
+                }
+              } catch (err) {
+                console.error("Failed to enter AR:", err);
+                setArModeRequested(false);
+                // Fallback to VR
+                try {
+                  await xrStore.enterVR();
+                } catch (vrErr) {
+                  console.error("Failed to enter VR:", vrErr);
+                }
+              }
             }}
           >
             Enter AR
