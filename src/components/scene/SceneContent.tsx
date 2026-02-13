@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -154,7 +155,7 @@ class SceneContentLogic {
       rotationValue: 0,
       furnitureCatalog: [],
       catalogLoading: false,
-      showSidebar: ,
+      showSidebar: true,
       sidebarActiveItem: null,
       showTransformGizmo: false,
       gizmoPosition: null,
@@ -1002,6 +1003,15 @@ class SceneContentLogic {
     }
   }
 
+  handleToggleHomeTransparency(): void {
+    const homeModel = this.sceneManager?.getHomeModel();
+    if (!homeModel) return;
+ 
+    const newTransparent = !this.state.homeTransparent;
+    homeModel.setTransparent(newTransparent);
+    this.updateState({ homeTransparent: newTransparent });
+  }
+
   handleToggleControlPanel(): void {
     const { showMoveCloserPanel, showPreciseCheckPanel, showControlPanel } =
       this.state;
@@ -1361,7 +1371,6 @@ class SceneContentLogic {
       rotationGizmoPosition: null,
       showScalePanel: false,
       sidebarActiveItem: null,
-      selectedItemWallMountable: false,
       selectedItemPlacementMode: "floor",
       showTexturePanel: false,
       textureOptions: [],
