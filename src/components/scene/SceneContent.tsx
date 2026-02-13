@@ -8,27 +8,37 @@ import * as THREE from "three";
 import { CatalogToggle } from "../panel/furniture/FurnitureCatalogToggle";
 import { VRInstructionPanel } from "../panel/VRInstructionPanel";
 import { VRFurniturePanel } from "../panel/furniture/FurniturePanel";
-import { ScaleControlPanel} from "../panel/VRSlider";
+import { ScaleControlPanel } from "../panel/VRSlider";
 import { HeadLockedUI } from "../panel/common/HeadLockedUI";
 import { VRControlPanel } from "../panel/control/ControlPanel";
 import { ControlPanelToggle } from "../panel/control/ControlPanelToggle";
 import { VRNotificationPanel } from "../panel/common/NotificationPanel";
 import { VRPreciseCollisionPanel } from "../panel/furniture/FurnitureCollisionPanel";
 import { SceneManager } from "../../core/managers/SceneManager";
-import { FurnitureItem, FurnitureMetadata } from "../../core/objects/FurnitureItem";
+import {
+  FurnitureItem,
+  FurnitureMetadata,
+} from "../../core/objects/FurnitureItem";
 import { HomeModel } from "../../core/objects/HomeModel";
-import { NavigationController, FurnitureEditController } from "../../core/controllers/XRControllerBase";
+import {
+  NavigationController,
+  FurnitureEditController,
+} from "../../core/controllers/XRControllerBase";
 import { makeAuthenticatedRequest, logout } from "../../utils/Auth";
 import { VRSidebar } from "../panel/VRSidebar"; //add
 import { TransformGizmo } from "../panel/TransformGizmo";
 import { RotationGizmo } from "../panel/RotationGizmo";
-import { TextureSelectorPanel, TextureOption } from "../panel/texture/TextureSelectorPanel";
-import { EnvironmentSelectorPanel, EnvironmentOption } from "../panel/texture/EnvironmentSelectorPanel";
+import {
+  TextureSelectorPanel,
+  TextureOption,
+} from "../panel/texture/TextureSelectorPanel";
+import {
+  EnvironmentSelectorPanel,
+  EnvironmentOption,
+} from "../panel/texture/EnvironmentSelectorPanel";
 
-
-
-
-const DIGITAL_HOME_PLATFORM_BASE_URL = import.meta.env.VITE_DIGITAL_HOME_PLATFORM_URL;
+const DIGITAL_HOME_PLATFORM_BASE_URL = import.meta.env
+  .VITE_DIGITAL_HOME_PLATFORM_URL;
 
 interface SceneContentProps {
   homeId: string;
@@ -66,15 +76,15 @@ interface SceneState {
   rotationValue: number;
   furnitureCatalog: any[];
   catalogLoading: boolean;
-  showSidebar: boolean; 
-  sidebarActiveItem: string | null; 
-  showTransformGizmo: boolean; 
-  gizmoPosition: [number, number, number] | null; 
-  showRotationGizmo: boolean;  
-  rotationGizmoPosition: [number, number, number] | null; 
+  showSidebar: boolean;
+  sidebarActiveItem: string | null;
+  showTransformGizmo: boolean;
+  gizmoPosition: [number, number, number] | null;
+  showRotationGizmo: boolean;
+  rotationGizmoPosition: [number, number, number] | null;
   showScalePanel: boolean;
   selectedItemWallMountable: boolean;
-  selectedItemPlacementMode: 'floor' | 'wall';
+  selectedItemPlacementMode: "floor" | "wall";
   showTexturePanel: boolean;
   textureOptions: TextureOption[];
   selectedFurnitureTextureId: string | undefined;
@@ -88,20 +98,19 @@ interface SceneState {
 
 class SceneContentLogic {
   private state: SceneState;
-  private setState: (updater: Partial<SceneState> | ((prev: SceneState) => Partial<SceneState>)) => void;
+  private setState: (
+    updater: Partial<SceneState> | ((prev: SceneState) => Partial<SceneState>),
+  ) => void;
   private homeId: string;
   private navigate: (path: string) => void;
-  
- 
+
   public sceneManager: SceneManager | null = null;
   public navigationController: NavigationController | null = null;
   public furnitureController: FurnitureEditController | null = null;
-  
 
   public pendingMove: [number, number, number] | null = null;
   public currentAABBPosition: [number, number, number] | null = null;
   public modelUrlCache: Map<number, string> = new Map();
-
 
   private textureCache: Map<string, TextureOption[]> = new Map();
   private textureLoadingCache: Map<string, Promise<void>> = new Map();
@@ -109,12 +118,16 @@ class SceneContentLogic {
   constructor(
     homeId: string,
     navigate: (path: string) => void,
-    setState: (updater: Partial<SceneState> | ((prev: SceneState) => Partial<SceneState>)) => void
+    setState: (
+      updater:
+        | Partial<SceneState>
+        | ((prev: SceneState) => Partial<SceneState>),
+    ) => void,
   ) {
     this.homeId = homeId;
     this.navigate = navigate;
     this.setState = setState;
-    
+
     this.state = {
       showSlider: false,
       showFurniture: false,
@@ -135,15 +148,15 @@ class SceneContentLogic {
       rotationValue: 0,
       furnitureCatalog: [],
       catalogLoading: false,
-      showSidebar: true, 
-      sidebarActiveItem: null, 
-      showTransformGizmo: false, 
-      gizmoPosition: null, 
-      showRotationGizmo: false,  
-      rotationGizmoPosition: null, 
+      showSidebar: true,
+      sidebarActiveItem: null,
+      showTransformGizmo: false,
+      gizmoPosition: null,
+      showRotationGizmo: false,
+      rotationGizmoPosition: null,
       showScalePanel: false,
       selectedItemWallMountable: false,
-      selectedItemPlacementMode: 'floor',
+      selectedItemPlacementMode: "floor",
       showTexturePanel: false,
       textureOptions: [],
       selectedFurnitureTextureId: undefined,
@@ -180,7 +193,7 @@ class SceneContentLogic {
       },
       (isActive) => {
         this.updateState({ navigationMode: isActive });
-      }
+      },
     );
 
     this.furnitureController = new FurnitureEditController(
@@ -200,12 +213,16 @@ class SceneContentLogic {
           this.handleFurnitureDeselect(id);
         },
         onWallFurnitureMove: async (id, deltaVertical, deltaHorizontal) => {
-          await this.handleWallFurnitureMove(id, deltaVertical, deltaHorizontal);
+          await this.handleWallFurnitureMove(
+            id,
+            deltaVertical,
+            deltaHorizontal,
+          );
         },
         isWallMounted: (id) => {
           return this.sceneManager?.isWallMounted(id) || false;
         },
-      }
+      },
     );
   }
 
@@ -224,30 +241,29 @@ class SceneContentLogic {
     this.navigationController.setRig(rig);
   }
 
-cleanup(): void {
-  this.sceneManager?.dispose();
-  this.navigationController?.reset();
-  this.furnitureController?.reset();
-  this.modelUrlCache.forEach(url => URL.revokeObjectURL(url));
-  
+  cleanup(): void {
+    this.sceneManager?.dispose();
+    this.navigationController?.reset();
+    this.furnitureController?.reset();
+    this.modelUrlCache.forEach((url) => URL.revokeObjectURL(url));
 
-  this.textureCache.clear();
-  this.textureLoadingCache.clear();
+    this.textureCache.clear();
+    this.textureLoadingCache.clear();
 
-  this.state.floorTextures.forEach(tex => {
-    if (tex.imagePath) URL.revokeObjectURL(tex.imagePath);
-  });
-  this.state.wallTextures.forEach(tex => {
-    if (tex.imagePath) URL.revokeObjectURL(tex.imagePath);
-  });
-}
+    this.state.floorTextures.forEach((tex) => {
+      if (tex.imagePath) URL.revokeObjectURL(tex.imagePath);
+    });
+    this.state.wallTextures.forEach((tex) => {
+      if (tex.imagePath) URL.revokeObjectURL(tex.imagePath);
+    });
+  }
 
   async loadHome(digitalHome?: any): Promise<void> {
     if (!this.sceneManager) return;
 
     try {
       const response = await makeAuthenticatedRequest(
-        `/digitalhomes/download_digital_home/${this.homeId}/`
+        `/digitalhomes/download_digital_home/${this.homeId}/`,
       );
 
       if (response.ok) {
@@ -256,29 +272,30 @@ cleanup(): void {
 
         const homeModel = new HomeModel(
           this.homeId,
-          'Digital Home',
+          "Digital Home",
           parseInt(this.homeId),
           url,
-          digitalHome?.spatialData?.boundary
+          digitalHome?.spatialData?.boundary,
         );
 
         await this.sceneManager.setHomeModel(homeModel);
         this.debugHomeModelStructure();
       }
     } catch (error) {
-      console.error('Failed to load home:', error);
+      console.error("Failed to load home:", error);
     }
   }
 
   async loadFurnitureCatalog(): Promise<void> {
     this.updateState({ catalogLoading: true });
     try {
-      const response = await makeAuthenticatedRequest('/digitalhomes/list_available_items/');
-     
+      const response = await makeAuthenticatedRequest(
+        "/digitalhomes/list_available_items/",
+      );
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Furniture catalog data:', data);
+        console.log("Furniture catalog data:", data);
         const items = data.available_items.map((item: any) => ({
           id: item.id.toString(),
           name: item.name,
@@ -298,7 +315,7 @@ cleanup(): void {
         }
       }
     } catch (error) {
-      console.error('Error loading furniture catalog:', error);
+      console.error("Error loading furniture catalog:", error);
     } finally {
       this.updateState({ catalogLoading: false });
     }
@@ -308,7 +325,9 @@ cleanup(): void {
     if (this.modelUrlCache.has(modelId)) return;
 
     try {
-      const response = await makeAuthenticatedRequest(`/products/get_3d_model/${modelId}/`);
+      const response = await makeAuthenticatedRequest(
+        `/products/get_3d_model/${modelId}/`,
+      );
       if (response.ok) {
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
@@ -325,7 +344,7 @@ cleanup(): void {
     this.updateState({ loading: true });
     try {
       const response = await makeAuthenticatedRequest(
-        `/digitalhomes/get_deployed_items_details/${this.homeId}/`
+        `/digitalhomes/get_deployed_items_details/${this.homeId}/`,
       );
 
       if (response.ok) {
@@ -355,7 +374,7 @@ cleanup(): void {
               position: itemData.spatialData.positions,
               rotation: itemData.spatialData.rotation,
               scale: itemData.spatialData.scale[0],
-            }
+            },
           );
 
           await this.sceneManager.addFurniture(furniture);
@@ -368,522 +387,510 @@ cleanup(): void {
         }
       }
     } catch (error) {
-      console.error('Error loading deployed items:', error);
+      console.error("Error loading deployed items:", error);
     } finally {
       this.updateState({ loading: false });
     }
   }
 
+  async loadTexturesForFurniture(furnitureId: string): Promise<void> {
+    if (!this.sceneManager) return;
 
-async loadTexturesForFurniture(furnitureId: string): Promise<void> {
-  if (!this.sceneManager) return;
-  
-  const furniture = this.sceneManager.getFurniture(furnitureId);
-  if (!furniture) return;
+    const furniture = this.sceneManager.getFurniture(furnitureId);
+    if (!furniture) return;
 
+    const modelId = furniture.getModelId();
+    const cacheKey = `model-${modelId}`;
 
-  const modelId = furniture.getModelId();
-  const cacheKey = `model-${modelId}`;
+    if (this.textureCache.has(cacheKey)) {
+      return Promise.resolve().then(() => {
+        this.updateState({
+          textureOptions: this.textureCache.get(cacheKey) || [],
+          selectedFurnitureTextureId: undefined,
+        });
+      });
+    }
 
+    if (this.textureLoadingCache.has(cacheKey)) {
+      return this.textureLoadingCache.get(cacheKey)!;
+    }
 
-  if (this.textureCache.has(cacheKey)) {
-    
-    return Promise.resolve().then(() => {
+    const loadingPromise = this._fetchTexturesFromAPI(modelId, cacheKey);
+    this.textureLoadingCache.set(cacheKey, loadingPromise);
+
+    try {
+      await loadingPromise;
+    } finally {
+      this.textureLoadingCache.delete(cacheKey);
+    }
+  }
+
+  private async _fetchTexturesFromAPI(
+    model_id: number,
+    cacheKey: string,
+  ): Promise<void> {
+    if (!this.sceneManager) return;
+
+    try {
+      const response = await makeAuthenticatedRequest(
+        `/products/get_texture/${model_id}/`,
+      );
+
+      if (!response.ok) {
+        console.warn(`[TEXTURES] ⚠️ API failed (${response.status})`);
+        this.updateState({
+          textureOptions: [],
+          selectedFurnitureTextureId: undefined,
+        });
+        return;
+      }
+
+      const data = await response.json();
+
+      const textures: TextureOption[] = [];
+      const textureLoaders: Promise<void>[] = [];
+
+      for (let index = 0; index < data.textures.length; index++) {
+        const texture = data.textures[index];
+
+        const loadPromise = (async () => {
+          try {
+            const base64String = texture.file;
+
+            const binaryString = atob(base64String);
+
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            const blob = new Blob([bytes], { type: "image/jpeg" });
+
+            const blobUrl = URL.createObjectURL(blob);
+
+            const textureLoader = new THREE.TextureLoader();
+            const three3DTexture = await new Promise<THREE.Texture>(
+              (resolve, reject) => {
+                textureLoader.load(
+                  blobUrl,
+                  (loadedTexture) => {
+                    loadedTexture.wrapS = THREE.RepeatWrapping;
+                    loadedTexture.wrapT = THREE.RepeatWrapping;
+                    loadedTexture.magFilter = THREE.LinearFilter;
+                    loadedTexture.minFilter = THREE.LinearFilter;
+                    loadedTexture.needsUpdate = true;
+
+                    resolve(loadedTexture);
+                  },
+                  undefined,
+                  (error) => {
+                    console.error(
+                      `[TEXTURES] ❌ Failed to load THREE.Texture ${texture.texture_id}:`,
+                      error,
+                    );
+                    reject(error);
+                  },
+                );
+              },
+            );
+
+            textures.push({
+              id: `texture-${texture.texture_id}`,
+              name: `Texture ${index + 1}`,
+              imagePath: blobUrl,
+              color: "#ffffff",
+
+              threeTexture: three3DTexture,
+            });
+          } catch (error) {
+            console.error(
+              `[TEXTURES] ❌ Failed to process texture ${texture.texture_id}:`,
+              error,
+            );
+          }
+        })();
+
+        textureLoaders.push(loadPromise);
+      }
+
+      await Promise.all(textureLoaders);
+
+      this.textureCache.set(cacheKey, textures);
+
       this.updateState({
-        textureOptions: this.textureCache.get(cacheKey) || [],
+        textureOptions: textures,
         selectedFurnitureTextureId: undefined,
       });
-    });
-  }
-
-  if (this.textureLoadingCache.has(cacheKey)) {
-    return this.textureLoadingCache.get(cacheKey)!;
-  }
-
-  const loadingPromise = this._fetchTexturesFromAPI(modelId, cacheKey);
-  this.textureLoadingCache.set(cacheKey, loadingPromise);
-
-  try {
-    await loadingPromise;
-  } finally {
-    this.textureLoadingCache.delete(cacheKey);
-  }
-}
-
-
-private async _fetchTexturesFromAPI(model_id: number, cacheKey: string): Promise<void> {
-  if (!this.sceneManager) return;
-
-  try {
-
-    const response = await makeAuthenticatedRequest(
-      `/products/get_texture/${model_id}/`
-    );
-
-    if (!response.ok) {
-      console.warn(`[TEXTURES] ⚠️ API failed (${response.status})`);
+    } catch (error) {
+      console.error("[TEXTURES] ❌ Error:", error);
+      this.showNotificationMessage("Failed to load textures", "error");
       this.updateState({
         textureOptions: [],
         selectedFurnitureTextureId: undefined,
       });
+    }
+  }
+
+  handleShowTextures(): void {
+    if (!this.state.selectedItemId) {
+      this.showNotificationMessage(
+        "Please select a furniture item first",
+        "info",
+      );
       return;
     }
 
-    const data = await response.json();
-    
-    const textures: TextureOption[] = [];
+    this.loadTexturesForFurniture(this.state.selectedItemId).then(() => {
+      const hasTextures =
+        this.state.textureOptions && this.state.textureOptions.length > 0;
+      if (!hasTextures) {
+        this.showNotificationMessage(
+          "No textures available for this item",
+          "info",
+        );
+        return;
+      }
+      this.updateState({ showTexturePanel: true });
+    });
+  }
+
+  async handleSelectTexture(
+    textureId: string,
+    texturePath: string,
+  ): Promise<void> {
+    if (!this.state.selectedItemId || !this.sceneManager) return;
+
+    try {
+      const furniture = this.sceneManager.getFurniture(
+        this.state.selectedItemId,
+      );
+      if (!furniture) return;
+
+      const textureLoader = new THREE.TextureLoader();
+      const texture = await new Promise<THREE.Texture>((resolve, reject) => {
+        textureLoader.load(texturePath, resolve, undefined, reject);
+      });
+
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+
+      texture.repeat.set(20, 20);
+
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.anisotropy = 16;
+
+      texture.needsUpdate = true;
+
+      const group = furniture.getGroup();
+      group.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          const material = child.material.clone();
+          material.map = texture;
+          material.needsUpdate = true;
+          child.material = material;
+        }
+      });
+
+      this.updateState({
+        selectedFurnitureTextureId: textureId,
+      });
+    } catch (error) {
+      console.error("[TEXTURE] Failed to apply texture:", error);
+      this.showNotificationMessage("Failed to load texture", "error");
+    }
+  }
+
+  handleCloseTexturePanel(): void {
+    this.updateState({ showTexturePanel: false });
+  }
+
+  async loadEnvironmentTextures(): Promise<void> {
+    this.updateState({ loadingEnvironment: true });
+    try {
+      const floorResponse = await makeAuthenticatedRequest(
+        `/digitalhomes/get_textures/${this.homeId}`,
+      );
+
+      if (floorResponse.ok) {
+        const floorData = await floorResponse.json();
+        const floorTextures = await this.processEnvironmentTextures(
+          floorData.textures,
+          "floor",
+        );
+        this.updateState({ floorTextures });
+      }
+
+      const wallResponse = await makeAuthenticatedRequest(
+        `/digitalhomes/get_textures/${this.homeId}`,
+      );
+
+      if (wallResponse.ok) {
+        const wallData = await wallResponse.json();
+        const wallTextures = await this.processEnvironmentTextures(
+          wallData.textures,
+          "wall",
+        );
+        this.updateState({ wallTextures });
+      }
+    } catch (error) {
+      console.error("Error loading environment textures:", error);
+      this.showNotificationMessage(
+        "Failed to load environment textures",
+        "error",
+      );
+    } finally {
+      this.updateState({ loadingEnvironment: false });
+    }
+  }
+
+  private async processEnvironmentTextures(
+    textures: any[],
+    type: "floor" | "wall",
+  ): Promise<EnvironmentOption[]> {
+    const processedTextures: EnvironmentOption[] = [];
     const textureLoaders: Promise<void>[] = [];
-    
-    for (let index = 0; index < data.textures.length; index++) {
-      const texture = data.textures[index];
-      
+
+    for (let index = 0; index < textures.length; index++) {
+      const texture = textures[index];
+
       const loadPromise = (async () => {
         try {
-     
           const base64String = texture.file;
-          
-       
+
           const binaryString = atob(base64String);
-          
- 
+
           const bytes = new Uint8Array(binaryString.length);
           for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
           }
-    
-          const blob = new Blob([bytes], { type: 'image/jpeg' });
-          
-         
+
+          const blob = new Blob([bytes], { type: "image/jpeg" });
+
           const blobUrl = URL.createObjectURL(blob);
-          
-     
+
           const textureLoader = new THREE.TextureLoader();
-          const three3DTexture = await new Promise<THREE.Texture>((resolve, reject) => {
-            textureLoader.load(
-              blobUrl,
-              (loadedTexture) => {
-                
-         
-                loadedTexture.wrapS = THREE.RepeatWrapping;
-                loadedTexture.wrapT = THREE.RepeatWrapping;
-                loadedTexture.magFilter = THREE.LinearFilter;
-                loadedTexture.minFilter = THREE.LinearFilter;
-                loadedTexture.needsUpdate = true;
-                
-                resolve(loadedTexture);
-              },
-              undefined,
-              (error) => {
-                console.error(`[TEXTURES] ❌ Failed to load THREE.Texture ${texture.texture_id}:`, error);
-                reject(error);
-              }
-            );
-          });
-          
-      
-          textures.push({
-            id: `texture-${texture.texture_id}`,
-            name: `Texture ${index + 1}`,
-            imagePath: blobUrl, 
-            color: '#ffffff',
-          
+          const three3DTexture = await new Promise<THREE.Texture>(
+            (resolve, reject) => {
+              textureLoader.load(
+                blobUrl,
+                (loadedTexture) => {
+                  loadedTexture.wrapS = THREE.RepeatWrapping;
+                  loadedTexture.wrapT = THREE.RepeatWrapping;
+                  loadedTexture.magFilter = THREE.LinearFilter;
+                  loadedTexture.minFilter = THREE.LinearFilter;
+                  loadedTexture.needsUpdate = true;
+                  resolve(loadedTexture);
+                },
+                undefined,
+                reject,
+              );
+            },
+          );
+
+          processedTextures.push({
+            id: `${type}-texture-${texture.texture_id}`,
+            name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${index + 1}`,
+            type: type,
+            imagePath: blobUrl,
+            color: "#ffffff",
             threeTexture: three3DTexture,
           });
-          
         } catch (error) {
-          console.error(`[TEXTURES] ❌ Failed to process texture ${texture.texture_id}:`, error);
+          console.error(
+            `[ENV-TEXTURES] Failed to process ${type} texture ${texture.texture_id}:`,
+            error,
+          );
         }
       })();
-      
+
       textureLoaders.push(loadPromise);
     }
-    
-  
-   
+
     await Promise.all(textureLoaders);
-    
- 
-    this.textureCache.set(cacheKey, textures);
-    
 
-    this.updateState({
-      textureOptions: textures,
-      selectedFurnitureTextureId: undefined,
-    });
-    
-   
-  } catch (error) {
-    console.error("[TEXTURES] ❌ Error:", error);
-    this.showNotificationMessage("Failed to load textures", "error");
-    this.updateState({
-      textureOptions: [],
-      selectedFurnitureTextureId: undefined,
-    });
-  }
-}
-
-
-handleShowTextures(): void {
-  if (!this.state.selectedItemId) {
-    this.showNotificationMessage("Please select a furniture item first", "info");
-    return;
+    return processedTextures;
   }
 
-  this.loadTexturesForFurniture(this.state.selectedItemId).then(() => {
-    const hasTextures = this.state.textureOptions && this.state.textureOptions.length > 0;
-    if (!hasTextures) {
-      this.showNotificationMessage("No textures available for this item", "info");
+  async handleSelectFloorTexture(
+    textureId: string,
+    texturePath: string,
+  ): Promise<void> {
+    if (!this.sceneManager) return;
+
+    try {
+      const homeModel = this.sceneManager.getHomeModel();
+      if (!homeModel) {
+        this.showNotificationMessage("Home model not loaded", "error");
+        return;
+      }
+
+      const textureLoader = new THREE.TextureLoader();
+
+      textureLoader.load(
+        texturePath,
+        (loadedTexture) => {
+          loadedTexture.wrapS = THREE.RepeatWrapping;
+          loadedTexture.wrapT = THREE.RepeatWrapping;
+          loadedTexture.repeat.set(20, 20);
+          loadedTexture.minFilter = THREE.LinearMipmapLinearFilter;
+          loadedTexture.magFilter = THREE.LinearFilter;
+          loadedTexture.anisotropy = 16;
+          loadedTexture.needsUpdate = true;
+
+          let floorCount = 0;
+          homeModel.getGroup().traverse((child) => {
+            if (child instanceof THREE.Mesh && child.material) {
+              if (child.name === "Floor" || child.name.includes("Floor")) {
+                const material = Array.isArray(child.material)
+                  ? child.material.map((m) => m.clone())
+                  : child.material.clone();
+
+                if (Array.isArray(material)) {
+                  material.forEach((m) => {
+                    m.map = loadedTexture;
+                    m.needsUpdate = true;
+                  });
+                } else {
+                  material.map = loadedTexture;
+                  material.needsUpdate = true;
+                }
+
+                child.material = material;
+                floorCount++;
+              }
+            }
+          });
+
+          if (floorCount === 0) {
+            console.warn("[FLOOR-TEXTURE] No floor meshes found!");
+            this.showNotificationMessage(
+              "No floor meshes found in model",
+              "error",
+            );
+          } else {
+            this.updateState({ selectedFloorId: textureId });
+            this.showNotificationMessage(
+              `Floor texture updated! (${floorCount} meshes)`,
+              "success",
+            );
+          }
+        },
+        undefined,
+        (error) => {
+          console.error("[FLOOR-TEXTURE] Failed to load texture:", error);
+          this.showNotificationMessage("Failed to load floor texture", "error");
+        },
+      );
+    } catch (error) {
+      console.error("[FLOOR-TEXTURE] Error:", error);
+      this.showNotificationMessage("Failed to apply floor texture", "error");
+    }
+  }
+
+  async handleSelectWallTexture(
+    textureId: string,
+    texturePath: string,
+  ): Promise<void> {
+    if (!this.sceneManager) return;
+
+    try {
+      const homeModel = this.sceneManager.getHomeModel();
+      if (!homeModel) {
+        this.showNotificationMessage("Home model not loaded", "error");
+        return;
+      }
+
+      const textureLoader = new THREE.TextureLoader();
+
+      textureLoader.load(
+        texturePath,
+        (loadedTexture) => {
+          loadedTexture.wrapS = THREE.RepeatWrapping;
+          loadedTexture.wrapT = THREE.RepeatWrapping;
+          loadedTexture.repeat.set(20, 20);
+          loadedTexture.minFilter = THREE.LinearMipmapLinearFilter;
+          loadedTexture.magFilter = THREE.LinearFilter;
+          loadedTexture.anisotropy = 16;
+          loadedTexture.needsUpdate = true;
+
+          let wallCount = 0;
+          homeModel.getGroup().traverse((child) => {
+            if (child instanceof THREE.Mesh && child.material) {
+              if (child.name === "Wall" || child.name.includes("Wall")) {
+                const material = Array.isArray(child.material)
+                  ? child.material.map((m) => m.clone())
+                  : child.material.clone();
+
+                if (Array.isArray(material)) {
+                  material.forEach((m) => {
+                    m.map = loadedTexture;
+                    m.needsUpdate = true;
+                  });
+                } else {
+                  material.map = loadedTexture;
+                  material.needsUpdate = true;
+                }
+
+                child.material = material;
+                wallCount++;
+              }
+            }
+          });
+
+          if (wallCount === 0) {
+            console.warn("[WALL-TEXTURE] No wall meshes found!");
+            this.showNotificationMessage(
+              "No wall meshes found in model",
+              "error",
+            );
+          } else {
+            this.updateState({ selectedWallId: textureId });
+            this.showNotificationMessage(
+              `Wall texture updated! (${wallCount} meshes)`,
+              "success",
+            );
+          }
+        },
+        undefined,
+        (error) => {
+          console.error("[WALL-TEXTURE] Failed to load texture:", error);
+          this.showNotificationMessage("Failed to load wall texture", "error");
+        },
+      );
+    } catch (error) {
+      console.error("[WALL-TEXTURE] Error:", error);
+      this.showNotificationMessage("Failed to apply wall texture", "error");
+    }
+  }
+
+  debugHomeModelStructure(): void {
+    if (!this.sceneManager) return;
+
+    const homeModel = this.sceneManager.getHomeModel();
+    if (!homeModel) {
+      console.warn("[DEBUG] No home model loaded");
       return;
     }
-    this.updateState({ showTexturePanel: true });
-  });
-}
 
+    const meshes: any[] = [];
 
-async handleSelectTexture(textureId: string, texturePath: string): Promise<void> {
-  if (!this.state.selectedItemId || !this.sceneManager) return;
-
-  try {
-    const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
-    if (!furniture) return;
-
-    const textureLoader = new THREE.TextureLoader();
-    const texture = await new Promise<THREE.Texture>((resolve, reject) => {
-      textureLoader.load(texturePath, resolve, undefined, reject);
-    });
-
- 
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    
-    
-    texture.repeat.set(20, 20); 
-    
-    
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.anisotropy = 16; 
-    
-    texture.needsUpdate = true;
-
-  
-    const group = furniture.getGroup();
-    group.traverse((child) => {
+    homeModel.getGroup().traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {
-
-        const material = child.material.clone();
-        material.map = texture;
-        material.needsUpdate = true;
-        child.material = material;
+        meshes.push({
+          name: child.name,
+          type: child.userData?.type || "unknown",
+          materialType: child.material.constructor.name,
+          hasMaterial: !!child.material,
+        });
       }
     });
-
- 
-    this.updateState({
-      selectedFurnitureTextureId: textureId,
-    });
-
-  } catch (error) {
-    console.error("[TEXTURE] Failed to apply texture:", error);
-    this.showNotificationMessage("Failed to load texture", "error");
   }
-}
-
-
-handleCloseTexturePanel(): void {
-  this.updateState({ showTexturePanel: false });
-}
-
-
-
-async loadEnvironmentTextures(): Promise<void> {
-  this.updateState({ loadingEnvironment: true });
-  try {
-
-    const floorResponse = await makeAuthenticatedRequest(
-      `/digitalhomes/get_textures/${this.homeId}` 
-    );
-    
-    if (floorResponse.ok) {
-      const floorData = await floorResponse.json();
-      const floorTextures = await this.processEnvironmentTextures(
-        floorData.textures,
-        'floor'
-      );
-      this.updateState({ floorTextures });
-    }
-
-
-    const wallResponse = await makeAuthenticatedRequest(
-      `/digitalhomes/get_textures/${this.homeId}` 
-    );
-    
-    if (wallResponse.ok) {
-      const wallData = await wallResponse.json();
-      const wallTextures = await this.processEnvironmentTextures(
-        wallData.textures,
-        'wall'
-      );
-      this.updateState({ wallTextures });
-    }
-  } catch (error) {
-    console.error('Error loading environment textures:', error);
-    this.showNotificationMessage('Failed to load environment textures', 'error');
-  } finally {
-    this.updateState({ loadingEnvironment: false });
-  }
-}
-
-private async processEnvironmentTextures(
-  textures: any[],
-  type: 'floor' | 'wall'
-): Promise<EnvironmentOption[]> {
-  const processedTextures: EnvironmentOption[] = [];
-  const textureLoaders: Promise<void>[] = [];
-
-  for (let index = 0; index < textures.length; index++) {
-    const texture = textures[index];
-    
-    const loadPromise = (async () => {
-      try {
-     
-        const base64String = texture.file;
-        
- 
-        const binaryString = atob(base64String);
-        
-   
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        
-    
-        const blob = new Blob([bytes], { type: 'image/jpeg' });
-        
-   
-        const blobUrl = URL.createObjectURL(blob);
-        
-       
-        const textureLoader = new THREE.TextureLoader();
-        const three3DTexture = await new Promise<THREE.Texture>((resolve, reject) => {
-          textureLoader.load(
-            blobUrl,
-            (loadedTexture) => {
-              loadedTexture.wrapS = THREE.RepeatWrapping;
-              loadedTexture.wrapT = THREE.RepeatWrapping;
-              loadedTexture.magFilter = THREE.LinearFilter;
-              loadedTexture.minFilter = THREE.LinearFilter;
-              loadedTexture.needsUpdate = true;
-              resolve(loadedTexture);
-            },
-            undefined,
-            reject
-          );
-        });
-
-
-        processedTextures.push({
-          id: `${type}-texture-${texture.texture_id}`,
-          name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${index + 1}`,
-          type: type,
-          imagePath: blobUrl,
-          color: '#ffffff',
-          threeTexture: three3DTexture,
-        });
-      } catch (error) {
-        console.error(`[ENV-TEXTURES] Failed to process ${type} texture ${texture.texture_id}:`, error);
-      }
-    })();
-    
-    textureLoaders.push(loadPromise);
-  }
-
-
-  await Promise.all(textureLoaders);
-  
-  return processedTextures;
-}
-
-
-async handleSelectFloorTexture(textureId: string, texturePath: string): Promise<void> {
-  if (!this.sceneManager) return;
-
-  try {
-    const homeModel = this.sceneManager.getHomeModel();
-    if (!homeModel) {
-      this.showNotificationMessage('Home model not loaded', 'error');
-      return;
-    }
-
-   
-
-    const textureLoader = new THREE.TextureLoader();
-    
-    textureLoader.load(
-      texturePath,
-      (loadedTexture) => {
-        loadedTexture.wrapS = THREE.RepeatWrapping;
-        loadedTexture.wrapT = THREE.RepeatWrapping;
-        loadedTexture.repeat.set(20, 20);
-        loadedTexture.minFilter = THREE.LinearMipmapLinearFilter;
-        loadedTexture.magFilter = THREE.LinearFilter;
-        loadedTexture.anisotropy = 16;
-        loadedTexture.needsUpdate = true;
-
-       
-
-        let floorCount = 0;
-        homeModel.getGroup().traverse((child) => {
-          if (child instanceof THREE.Mesh && child.material) {
-         
-            if (child.name === 'Floor' || child.name.includes('Floor')) {
-              
-              const material = Array.isArray(child.material) 
-                ? child.material.map(m => m.clone())
-                : child.material.clone();
-              
-              if (Array.isArray(material)) {
-                material.forEach(m => {
-                  m.map = loadedTexture;
-                  m.needsUpdate = true;
-                });
-              } else {
-                material.map = loadedTexture;
-                material.needsUpdate = true;
-              }
-              
-              child.material = material;
-              floorCount++;
-            }
-          }
-        });
-
-        if (floorCount === 0) {
-          console.warn('[FLOOR-TEXTURE] No floor meshes found!');
-          this.showNotificationMessage('No floor meshes found in model', 'error');
-        } else {
-          this.updateState({ selectedFloorId: textureId });
-          this.showNotificationMessage(`Floor texture updated! (${floorCount} meshes)`, 'success');
-         
-        }
-      },
-      undefined,
-      (error) => {
-        console.error('[FLOOR-TEXTURE] Failed to load texture:', error);
-        this.showNotificationMessage('Failed to load floor texture', 'error');
-      }
-    );
-  } catch (error) {
-    console.error('[FLOOR-TEXTURE] Error:', error);
-    this.showNotificationMessage('Failed to apply floor texture', 'error');
-  }
-}
-
-async handleSelectWallTexture(textureId: string, texturePath: string): Promise<void> {
-  if (!this.sceneManager) return;
-
-  try {
-    const homeModel = this.sceneManager.getHomeModel();
-    if (!homeModel) {
-      this.showNotificationMessage('Home model not loaded', 'error');
-      return;
-    }
-
-   
-
-    const textureLoader = new THREE.TextureLoader();
-    
-    textureLoader.load(
-      texturePath,
-      (loadedTexture) => {
-        loadedTexture.wrapS = THREE.RepeatWrapping;
-        loadedTexture.wrapT = THREE.RepeatWrapping;
-        loadedTexture.repeat.set(20, 20);
-        loadedTexture.minFilter = THREE.LinearMipmapLinearFilter;
-        loadedTexture.magFilter = THREE.LinearFilter;
-        loadedTexture.anisotropy = 16;
-        loadedTexture.needsUpdate = true;
-
-       
-
-        let wallCount = 0;
-        homeModel.getGroup().traverse((child) => {
-          if (child instanceof THREE.Mesh && child.material) {
-         
-            if (child.name === 'Wall' || child.name.includes('Wall')) {
-             
-              const material = Array.isArray(child.material) 
-                ? child.material.map(m => m.clone())
-                : child.material.clone();
-              
-              if (Array.isArray(material)) {
-                material.forEach(m => {
-                  m.map = loadedTexture;
-                  m.needsUpdate = true;
-                });
-              } else {
-                material.map = loadedTexture;
-                material.needsUpdate = true;
-              }
-              
-              child.material = material;
-              wallCount++;
-            }
-          }
-        });
-
-        if (wallCount === 0) {
-          console.warn('[WALL-TEXTURE] No wall meshes found!');
-          this.showNotificationMessage('No wall meshes found in model', 'error');
-        } else {
-          this.updateState({ selectedWallId: textureId });
-          this.showNotificationMessage(`Wall texture updated! (${wallCount} meshes)`, 'success');
-          
-        }
-      },
-      undefined,
-      (error) => {
-        console.error('[WALL-TEXTURE] Failed to load texture:', error);
-        this.showNotificationMessage('Failed to load wall texture', 'error');
-      }
-    );
-  } catch (error) {
-    console.error('[WALL-TEXTURE] Error:', error);
-    this.showNotificationMessage('Failed to apply wall texture', 'error');
-  }
-}
-
-debugHomeModelStructure(): void {
-  if (!this.sceneManager) return;
-  
-  const homeModel = this.sceneManager.getHomeModel();
-  if (!homeModel) {
-    console.warn('[DEBUG] No home model loaded');
-    return;
-  }
-
- 
-  const meshes: any[] = [];
-  
-  homeModel.getGroup().traverse((child) => {
-    if (child instanceof THREE.Mesh && child.material) {
-      meshes.push({
-        name: child.name,
-        type: child.userData?.type || 'unknown',
-        materialType: child.material.constructor.name,
-        hasMaterial: !!child.material,
-      });
-    }
-  });
-
-}
-
 
   showNotificationMessage(
     message: string,
     type: "success" | "error" | "info" = "info",
-    fromControlPanel: boolean = false
+    fromControlPanel: boolean = false,
   ): void {
     this.updateState({
       showControlPanel: fromControlPanel ? this.state.showControlPanel : false,
@@ -897,7 +904,14 @@ debugHomeModelStructure(): void {
   }
 
   handleToggleUI(): void {
-    const { showMoveCloserPanel, showPreciseCheckPanel, showControlPanel, showInstructions, showFurniture, selectedItemId } = this.state;
+    const {
+      showMoveCloserPanel,
+      showPreciseCheckPanel,
+      showControlPanel,
+      showInstructions,
+      showFurniture,
+      selectedItemId,
+    } = this.state;
 
     if (showMoveCloserPanel || showPreciseCheckPanel) return;
 
@@ -916,7 +930,8 @@ debugHomeModelStructure(): void {
   }
 
   handleToggleControlPanel(): void {
-    const { showMoveCloserPanel, showPreciseCheckPanel, showControlPanel } = this.state;
+    const { showMoveCloserPanel, showPreciseCheckPanel, showControlPanel } =
+      this.state;
 
     if (showMoveCloserPanel || showPreciseCheckPanel) return;
 
@@ -939,83 +954,88 @@ debugHomeModelStructure(): void {
     });
   }
 
-
   handleSidebarItemSelect(itemId: string): void {
-  this.updateState({ sidebarActiveItem: itemId });
-  
-  switch (itemId) {
-    case "movement":
-      this.updateState({ 
-        showInstructions: false,
-        showFurniture: false,
-        showControlPanel: false,
-        showSlider: false,
-        showRotationGizmo: false,  
-        showScalePanel: false,
-        showTexturePanel: false,
-        showEnvironmentPanel: false,  
-      });
-      
-      if (this.state.selectedItemId) {
-        const furniture = this.sceneManager?.getFurniture(this.state.selectedItemId);
-        if (furniture) {
-          this.updateState({
-            showTransformGizmo: true,
-            gizmoPosition: furniture.getPosition()
-          });
-        }
-      }
-      
-      break;
+    this.updateState({ sidebarActiveItem: itemId });
 
-    case "rotation":
-    
-      if (this.state.selectedItemId) {
-        const furniture = this.sceneManager?.getFurniture(this.state.selectedItemId);
-        if (furniture) {
-          this.updateState({ 
-            showRotationGizmo: true,  
-            rotationGizmoPosition: furniture.getPosition(),
-            showFurniture: false,
-            showControlPanel: false,
-            showTransformGizmo: false,
-            showSlider: false,
-            showScalePanel: false,
-            showTexturePanel: false,
-            showEnvironmentPanel: false,  
-          });
-        }
-      } 
-      break;
+    switch (itemId) {
+      case "movement":
+        this.updateState({
+          showInstructions: false,
+          showFurniture: false,
+          showControlPanel: false,
+          showSlider: false,
+          showRotationGizmo: false,
+          showScalePanel: false,
+          showTexturePanel: false,
+          showEnvironmentPanel: false,
+        });
 
-    case "scale":
-      if (this.state.selectedItemId) {
-        const furniture = this.sceneManager?.getFurniture(this.state.selectedItemId);
-        if (furniture) {
-          this.updateState({
-            showScalePanel: true,
-            showTransformGizmo: false,
-            showRotationGizmo: false,
-            showFurniture: false,
-            showControlPanel: false,
-            showSlider: false,
-            showTexturePanel: false,
-            showEnvironmentPanel: false,  
-          });
+        if (this.state.selectedItemId) {
+          const furniture = this.sceneManager?.getFurniture(
+            this.state.selectedItemId,
+          );
+          if (furniture) {
+            this.updateState({
+              showTransformGizmo: true,
+              gizmoPosition: furniture.getPosition(),
+            });
+          }
         }
-      }
-     
-      break;
 
-    case "environment":
-      
-      if (this.state.floorTextures.length === 0 && this.state.wallTextures.length === 0) {
-    
-        this.loadEnvironmentTextures();
-      }
-       this.updateState({
-          showEnvironmentPanel: true,      
-          showFurniture: false,           
+        break;
+
+      case "rotation":
+        if (this.state.selectedItemId) {
+          const furniture = this.sceneManager?.getFurniture(
+            this.state.selectedItemId,
+          );
+          if (furniture) {
+            this.updateState({
+              showRotationGizmo: true,
+              rotationGizmoPosition: furniture.getPosition(),
+              showFurniture: false,
+              showControlPanel: false,
+              showTransformGizmo: false,
+              showSlider: false,
+              showScalePanel: false,
+              showTexturePanel: false,
+              showEnvironmentPanel: false,
+            });
+          }
+        }
+        break;
+
+      case "scale":
+        if (this.state.selectedItemId) {
+          const furniture = this.sceneManager?.getFurniture(
+            this.state.selectedItemId,
+          );
+          if (furniture) {
+            this.updateState({
+              showScalePanel: true,
+              showTransformGizmo: false,
+              showRotationGizmo: false,
+              showFurniture: false,
+              showControlPanel: false,
+              showSlider: false,
+              showTexturePanel: false,
+              showEnvironmentPanel: false,
+            });
+          }
+        }
+
+        break;
+
+      case "environment":
+        if (
+          this.state.floorTextures.length === 0 &&
+          this.state.wallTextures.length === 0
+        ) {
+          this.loadEnvironmentTextures();
+        }
+        this.updateState({
+          showEnvironmentPanel: true,
+          showFurniture: false,
           showControlPanel: false,
           showTransformGizmo: false,
           showRotationGizmo: false,
@@ -1024,74 +1044,75 @@ debugHomeModelStructure(): void {
           showInstructions: false,
           showSlider: false,
         });
-      break;
+        break;
 
-
-    case "texture":
-    
-      this.updateState({
-        sidebarActiveItem: "texture", 
-        showFurniture: false,
-        showControlPanel: false,
-        showTransformGizmo: false,
-        showRotationGizmo: false,
-        showScalePanel: false,
-        showEnvironmentPanel: false,
-        showInstructions: false,
-        showSlider: false,
-        showTexturePanel: false,  
-      });
-      
-      if (this.state.selectedItemId) {
-        this.loadTexturesForFurniture(this.state.selectedItemId).then(() => {
-          const hasTextures = this.state.textureOptions && this.state.textureOptions.length > 0;
-          if (!hasTextures) {
-            this.showNotificationMessage("No textures available for this item", "info");
-            return;
-          }
-          this.updateState({
-            showTexturePanel: true,
-          });
+      case "texture":
+        this.updateState({
+          sidebarActiveItem: "texture",
+          showFurniture: false,
+          showControlPanel: false,
+          showTransformGizmo: false,
+          showRotationGizmo: false,
+          showScalePanel: false,
+          showEnvironmentPanel: false,
+          showInstructions: false,
+          showSlider: false,
+          showTexturePanel: false,
         });
-      } else {
-     
-        this.showNotificationMessage("Texture mode: Click on furniture to change texture", "info");
-      }
-     
-      break;
 
-    case "settings":
-      this.updateState({
-        showControlPanel: true,
-        showFurniture: false,
-        showSlider: false,
-        showInstructions: false,
-        showTransformGizmo: false,
-        showRotationGizmo: false,  
-        showScalePanel: false,
-        showTexturePanel: false,
-        showEnvironmentPanel: false,    
-      });
-      break;
+        if (this.state.selectedItemId) {
+          this.loadTexturesForFurniture(this.state.selectedItemId).then(() => {
+            const hasTextures =
+              this.state.textureOptions && this.state.textureOptions.length > 0;
+            if (!hasTextures) {
+              this.showNotificationMessage(
+                "No textures available for this item",
+                "info",
+              );
+              return;
+            }
+            this.updateState({
+              showTexturePanel: true,
+            });
+          });
+        } else {
+          this.showNotificationMessage(
+            "Texture mode: Click on furniture to change texture",
+            "info",
+          );
+        }
 
-    case "customize":
+        break;
 
-      this.updateState({ 
-        showFurniture: true,
-        showControlPanel: false,
-        showSlider: false,
-        showInstructions: false,
-        showTransformGizmo: false,
-        showRotationGizmo: false,  
-        showScalePanel: false,
-        showTexturePanel: false,
-        showEnvironmentPanel: false,    
-        
-      });
-      break;
+      case "settings":
+        this.updateState({
+          showControlPanel: true,
+          showFurniture: false,
+          showSlider: false,
+          showInstructions: false,
+          showTransformGizmo: false,
+          showRotationGizmo: false,
+          showScalePanel: false,
+          showTexturePanel: false,
+          showEnvironmentPanel: false,
+        });
+        break;
+
+      case "customize":
+        this.updateState({
+          showFurniture: true,
+          showControlPanel: false,
+          showSlider: false,
+          showInstructions: false,
+          showTransformGizmo: false,
+          showRotationGizmo: false,
+          showScalePanel: false,
+          showTexturePanel: false,
+          showEnvironmentPanel: false,
+        });
+        break;
+    }
   }
-}
-
 
   async handleSaveScene(): Promise<void> {
     if (this.state.saving || !this.sceneManager) return;
@@ -1101,23 +1122,38 @@ debugHomeModelStructure(): void {
       const sceneData = this.sceneManager.serializeScene();
 
       const formData = new FormData();
-      formData.append('id', this.homeId);
-      formData.append('deployedItems', JSON.stringify(sceneData.deployedItems));
+      formData.append("id", this.homeId);
+      formData.append("deployedItems", JSON.stringify(sceneData.deployedItems));
 
-      const response = await makeAuthenticatedRequest('/digitalhomes/update_home_design/', {
-        method: 'POST',
-        body: formData,
-      });
+      const response = await makeAuthenticatedRequest(
+        "/digitalhomes/update_home_design/",
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
 
       if (response.ok) {
-        this.showNotificationMessage('Scene saved successfully!', 'success', true);
+        this.showNotificationMessage(
+          "Scene saved successfully!",
+          "success",
+          true,
+        );
       } else {
         const error = await response.json();
-        this.showNotificationMessage(`Failed to save scene: ${error.error}`, 'error', true);
+        this.showNotificationMessage(
+          `Failed to save scene: ${error.error}`,
+          "error",
+          true,
+        );
       }
     } catch (error) {
-      console.error('Error saving scene:', error);
-      this.showNotificationMessage('Error saving scene. Please try again.', 'error', true);
+      console.error("Error saving scene:", error);
+      this.showNotificationMessage(
+        "Error saving scene. Please try again.",
+        "error",
+        true,
+      );
     } finally {
       this.updateState({ saving: false });
     }
@@ -1143,7 +1179,10 @@ debugHomeModelStructure(): void {
     window.location.href = DIGITAL_HOME_PLATFORM_BASE_URL;
   }
 
-  private async handleFurnitureMove(id: string, delta: THREE.Vector3): Promise<void> {
+  private async handleFurnitureMove(
+    id: string,
+    delta: THREE.Vector3,
+  ): Promise<void> {
     if (!this.sceneManager) return;
 
     const furniture = this.sceneManager.getFurniture(id);
@@ -1158,7 +1197,12 @@ debugHomeModelStructure(): void {
 
     const isInAABBZone = this.currentAABBPosition !== null;
 
-    const result = await this.sceneManager.moveFurniture(id, newPos, isInAABBZone, false);
+    const result = await this.sceneManager.moveFurniture(
+      id,
+      newPos,
+      isInAABBZone,
+      false,
+    );
 
     if (!result.success && result.needsConfirmation) {
       this.pendingMove = newPos;
@@ -1168,7 +1212,7 @@ debugHomeModelStructure(): void {
       this.updateState({ showPreciseCheckPanel: true });
     } else if (!result.success && !result.needsConfirmation) {
       if (result.reason) {
-        this.showNotificationMessage(`⚠️ ${result.reason}`, 'error');
+        this.showNotificationMessage(`⚠️ ${result.reason}`, "error");
       }
       this.currentAABBPosition = null;
     } else if (result.success && !result.needsPreciseCheck) {
@@ -1179,14 +1223,18 @@ debugHomeModelStructure(): void {
   private async handleWallFurnitureMove(
     id: string,
     deltaVertical: number,
-    deltaHorizontal: number
+    deltaHorizontal: number,
   ): Promise<void> {
     if (!this.sceneManager) return;
 
     const furniture = this.sceneManager.getFurniture(id);
     if (!furniture || !furniture.isOnWall()) return;
 
-    const result = await this.sceneManager.moveWallFurniture(id, deltaVertical, deltaHorizontal);
+    const result = await this.sceneManager.moveWallFurniture(
+      id,
+      deltaVertical,
+      deltaHorizontal,
+    );
 
     if (!result.success && result.needsConfirmation) {
       const newPos = furniture.moveAlongWall(deltaVertical, deltaHorizontal);
@@ -1198,7 +1246,7 @@ debugHomeModelStructure(): void {
       this.updateState({ showPreciseCheckPanel: true });
     } else if (!result.success && !result.needsConfirmation) {
       if (result.reason) {
-        this.showNotificationMessage(`⚠️ ${result.reason}`, 'error');
+        this.showNotificationMessage(`⚠️ ${result.reason}`, "error");
       }
       this.currentAABBPosition = null;
     } else if (result.success && !result.needsPreciseCheck) {
@@ -1227,33 +1275,32 @@ debugHomeModelStructure(): void {
     this.updateState({ rotationValue: normalizedRotation });
   }
 
-private handleFurnitureDeselect(id: string): void {
- 
-  
-  if (!this.sceneManager) return;
+  private handleFurnitureDeselect(id: string): void {
+    if (!this.sceneManager) return;
 
-  this.sceneManager.deselectFurniture(id);
-  this.updateState({ 
-    selectedItemId: null, 
-    showSlider: false,
-    showTransformGizmo: false,
-    gizmoPosition: null,
-    showRotationGizmo: false,
-    rotationGizmoPosition: null,
-    showScalePanel: false,
-    sidebarActiveItem: null,
-    selectedItemWallMountable: false,
-    selectedItemPlacementMode: 'floor',
-    showTexturePanel: false,
-    textureOptions: [],
-    selectedFurnitureTextureId: undefined,
-  });
-  this.currentAABBPosition = null;
-  this.pendingMove = null;
-}
+    this.sceneManager.deselectFurniture(id);
+    this.updateState({
+      selectedItemId: null,
+      showSlider: false,
+      showTransformGizmo: false,
+      gizmoPosition: null,
+      showRotationGizmo: false,
+      rotationGizmoPosition: null,
+      showScalePanel: false,
+      sidebarActiveItem: null,
+      selectedItemWallMountable: false,
+      selectedItemPlacementMode: "floor",
+      showTexturePanel: false,
+      textureOptions: [],
+      selectedFurnitureTextureId: undefined,
+    });
+    this.currentAABBPosition = null;
+    this.pendingMove = null;
+  }
 
   async handleConfirmMoveCloser(): Promise<void> {
-    if (!this.state.selectedItemId || !this.sceneManager || !this.pendingMove) return;
+    if (!this.state.selectedItemId || !this.sceneManager || !this.pendingMove)
+      return;
 
     this.updateState({ showMoveCloserPanel: false, showControlPanel: false });
 
@@ -1261,7 +1308,7 @@ private handleFurnitureDeselect(id: string): void {
       this.state.selectedItemId,
       this.pendingMove,
       true,
-      false
+      false,
     );
 
     if (result.success && result.needsPreciseCheck) {
@@ -1277,7 +1324,12 @@ private handleFurnitureDeselect(id: string): void {
   }
 
   async handleConfirmPreciseCheck(): Promise<void> {
-    if (!this.state.selectedItemId || !this.sceneManager || !this.currentAABBPosition) return;
+    if (
+      !this.state.selectedItemId ||
+      !this.sceneManager ||
+      !this.currentAABBPosition
+    )
+      return;
 
     this.updateState({
       preciseCheckInProgress: true,
@@ -1290,24 +1342,27 @@ private handleFurnitureDeselect(id: string): void {
         this.state.selectedItemId,
         this.currentAABBPosition,
         true,
-        true
+        true,
       );
 
       if (!result.success) {
         this.showNotificationMessage(
-          '⚠️ Precise overlap detected! Furniture moved back to safe position.',
-          'error'
+          "⚠️ Precise overlap detected! Furniture moved back to safe position.",
+          "error",
         );
         this.currentAABBPosition = null;
       } else {
         this.showNotificationMessage(
-          '✅ Position validated! Furniture can stay here.',
-          'success'
+          "✅ Position validated! Furniture can stay here.",
+          "success",
         );
       }
     } catch (error) {
-      console.error('Error during precise collision check:', error);
-      this.showNotificationMessage('❌ Error checking collision. Please try again.', 'error');
+      console.error("Error during precise collision check:", error);
+      this.showNotificationMessage(
+        "❌ Error checking collision. Please try again.",
+        "error",
+      );
     } finally {
       this.updateState({ preciseCheckInProgress: false });
     }
@@ -1316,16 +1371,20 @@ private handleFurnitureDeselect(id: string): void {
   handleCancelPreciseCheck(): void {
     if (!this.state.selectedItemId || !this.sceneManager) return;
 
-    const lastValid = this.sceneManager.getLastValidPosition(this.state.selectedItemId);
+    const lastValid = this.sceneManager.getLastValidPosition(
+      this.state.selectedItemId,
+    );
     if (lastValid) {
-      const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
+      const furniture = this.sceneManager.getFurniture(
+        this.state.selectedItemId,
+      );
       if (furniture) {
         furniture.setPosition(lastValid);
         const collisionDetector = this.sceneManager.getCollisionDetector();
         collisionDetector.updateFurnitureBox(
           this.state.selectedItemId,
           furniture.getGroup(),
-          furniture.getModelId()
+          furniture.getModelId(),
         );
         furniture.setCollision(false);
       }
@@ -1341,8 +1400,8 @@ private handleFurnitureDeselect(id: string): void {
     const catalogId = f.id;
     const allFurniture = this.sceneManager.getAllFurniture();
 
-    const existingFurniture = allFurniture.find(item => {
-      const placedCatalogId = item.getId().split('-')[0];
+    const existingFurniture = allFurniture.find((item) => {
+      const placedCatalogId = item.getId().split("-")[0];
       return placedCatalogId === catalogId;
     });
 
@@ -1356,13 +1415,12 @@ private handleFurnitureDeselect(id: string): void {
 
     const modelPath = this.modelUrlCache.get(f.model_id);
     if (!modelPath) {
-      console.warn('Model not loaded yet for:', f.name);
+      console.warn("Model not loaded yet for:", f.name);
       return;
     }
 
     const isWallMountable = f.wall_mountable || false;
-    
-   
+
     const spawnPos = this.sceneManager.calculateSpawnPosition(camera, 2);
     const initialRotation: [number, number, number] = [0, 0, 0];
 
@@ -1387,7 +1445,7 @@ private handleFurnitureDeselect(id: string): void {
         position: spawnPos,
         rotation: initialRotation,
         scale: this.state.sliderValue,
-      }
+      },
     );
 
     this.sceneManager.addFurniture(newFurniture).then(() => {
@@ -1397,199 +1455,204 @@ private handleFurnitureDeselect(id: string): void {
         selectedItemId: uniqueId,
         rotationValue: initialRotation[1],
         selectedItemWallMountable: isWallMountable,
-        selectedItemPlacementMode: 'floor',
+        selectedItemPlacementMode: "floor",
       });
     });
   }
 
-
-handleSelectItem(id: string): void {
-  if (!this.sceneManager) {
-   
-    return;
-  }
-  
-  if (this.state.selectedItemId === id && (this.state.showTransformGizmo || this.state.showRotationGizmo)) {
-  
-  return;
-}
-  
-  if (this.state.selectedItemId === id && !this.state.showTransformGizmo && !this.state.showRotationGizmo) {
-    
-    this.sceneManager.deselectFurniture(id);
-    this.furnitureController?.setSelectedFurniture(null);
-    this.updateState({
-      selectedItemId: null,
-      showSlider: false,
-      showTransformGizmo: false,
-      gizmoPosition: null,
-      showRotationGizmo: false,
-      rotationGizmoPosition: null,
-      selectedItemWallMountable: false,
-      selectedItemPlacementMode: 'floor',
-      showTexturePanel: false, 
-    });
-    return;
-  }
-  
-  if (this.state.selectedItemId) {
-   
-    this.sceneManager.deselectFurniture(this.state.selectedItemId);
-  }
-  
-  
-  this.sceneManager.selectFurniture(id);
-  this.furnitureController?.setSelectedFurniture(id);
-  
-  const furniture = this.sceneManager.getFurniture(id);
-  if (furniture) {
-    const rotation = furniture.getRotation();
-    const scale = furniture.getScale();
-    const position = furniture.getPosition();
-    
-    const twoPi = Math.PI * 2;
-    let normalizedRotation = rotation[1] % twoPi;
-    if (normalizedRotation < 0) normalizedRotation += twoPi;
-    
-    const scaleValue = typeof scale === 'number' ? scale : scale[0];
-    
-    const showMovementGizmo = this.state.sidebarActiveItem === 'movement';
-    const showRotGizmo = this.state.sidebarActiveItem === 'rotation';
-    const isTextureMode = this.state.sidebarActiveItem === 'texture';
-    
-    const isWallMountable = furniture.isWallMountable();
-    const placementMode = furniture.getPlacementMode();
-    
-  
-    this.updateState({
-      selectedItemId: id,
-      showSlider: !showMovementGizmo && !showRotGizmo && !isTextureMode,  
-      rotationValue: normalizedRotation,
-      sliderValue: scaleValue,
-      showTransformGizmo: showMovementGizmo,
-      gizmoPosition: showMovementGizmo ? position : null,
-      showRotationGizmo: showRotGizmo,
-      rotationGizmoPosition: showRotGizmo ? position : null,
-      selectedItemWallMountable: isWallMountable,
-      selectedItemPlacementMode: placementMode,
-   
-      showTexturePanel: false,
-      textureOptions: [],
-    });
-
-    if (isTextureMode) {
-      this.loadTexturesForFurniture(id).then(() => {
-        const hasTextures = this.state.textureOptions && this.state.textureOptions.length > 0;
-        if (!hasTextures) {
-          this.showNotificationMessage("No textures available for this item", "info");
-          return;
-        }
-        this.updateState({
-          showTexturePanel: true,
-        });
-      });
+  handleSelectItem(id: string): void {
+    if (!this.sceneManager) {
+      return;
     }
-     
-  
-  } else {
-    console.log("[handleSelectItem] ❌ Furniture not found:", id);
-  }
-}
 
+    if (
+      this.state.selectedItemId === id &&
+      (this.state.showTransformGizmo || this.state.showRotationGizmo)
+    ) {
+      return;
+    }
 
-  handleGizmoMove(axis: 'x' | 'y' | 'z', delta: number): void {
-  if (!this.state.selectedItemId || !this.sceneManager) {
-    console.warn(`[handleGizmoMove] Invalid state:`, {
-      selectedItemId: this.state.selectedItemId,
-      hasSceneManager: !!this.sceneManager,
-    });
-    return;
-  }
+    if (
+      this.state.selectedItemId === id &&
+      !this.state.showTransformGizmo &&
+      !this.state.showRotationGizmo
+    ) {
+      this.sceneManager.deselectFurniture(id);
+      this.furnitureController?.setSelectedFurniture(null);
+      this.updateState({
+        selectedItemId: null,
+        showSlider: false,
+        showTransformGizmo: false,
+        gizmoPosition: null,
+        showRotationGizmo: false,
+        rotationGizmoPosition: null,
+        selectedItemWallMountable: false,
+        selectedItemPlacementMode: "floor",
+        showTexturePanel: false,
+      });
+      return;
+    }
 
-  const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
-  if (!furniture) {
-    console.warn(`[handleGizmoMove] Furniture not found:`, this.state.selectedItemId);
-    return;
-  }
+    if (this.state.selectedItemId) {
+      this.sceneManager.deselectFurniture(this.state.selectedItemId);
+    }
 
-  const currentPos = furniture.getPosition();
-  const newPos: [number, number, number] = [...currentPos];
+    this.sceneManager.selectFurniture(id);
+    this.furnitureController?.setSelectedFurniture(id);
 
+    const furniture = this.sceneManager.getFurniture(id);
+    if (furniture) {
+      const rotation = furniture.getRotation();
+      const scale = furniture.getScale();
+      const position = furniture.getPosition();
 
-  switch (axis) {
-    case 'x':
-      newPos[0] += delta;
-      break;
-    case 'y':
-      newPos[1] += delta;
-      break;
-    case 'z':
-      newPos[2] += delta;
-      break;
-  }
+      const twoPi = Math.PI * 2;
+      let normalizedRotation = rotation[1] % twoPi;
+      if (normalizedRotation < 0) normalizedRotation += twoPi;
 
+      const scaleValue = typeof scale === "number" ? scale : scale[0];
 
-  this.sceneManager.moveFurniture(this.state.selectedItemId, newPos, false, false)
-    .then((result) => {
-      if (result.success) {
-        
- 
-        this.updateState({ gizmoPosition: newPos });
-      } else if (result.needsConfirmation) {
-        
-        this.pendingMove = newPos;
-        this.updateState({ showMoveCloserPanel: true });
-      } else {
-        console.warn(`[handleGizmoMove] ❌ Move failed:`, result.reason);
+      const showMovementGizmo = this.state.sidebarActiveItem === "movement";
+      const showRotGizmo = this.state.sidebarActiveItem === "rotation";
+      const isTextureMode = this.state.sidebarActiveItem === "texture";
+
+      const isWallMountable = furniture.isWallMountable();
+      const placementMode = furniture.getPlacementMode();
+
+      this.updateState({
+        selectedItemId: id,
+        showSlider: !showMovementGizmo && !showRotGizmo && !isTextureMode,
+        rotationValue: normalizedRotation,
+        sliderValue: scaleValue,
+        showTransformGizmo: showMovementGizmo,
+        gizmoPosition: showMovementGizmo ? position : null,
+        showRotationGizmo: showRotGizmo,
+        rotationGizmoPosition: showRotGizmo ? position : null,
+        selectedItemWallMountable: isWallMountable,
+        selectedItemPlacementMode: placementMode,
+
+        showTexturePanel: false,
+        textureOptions: [],
+      });
+
+      if (isTextureMode) {
+        this.loadTexturesForFurniture(id).then(() => {
+          const hasTextures =
+            this.state.textureOptions && this.state.textureOptions.length > 0;
+          if (!hasTextures) {
+            this.showNotificationMessage(
+              "No textures available for this item",
+              "info",
+            );
+            return;
+          }
+          this.updateState({
+            showTexturePanel: true,
+          });
+        });
       }
-    })
-    .catch((err) => {
-      console.error(`[handleGizmoMove] Error:`, err);
-    });
-}
-
-
-  handleGizmoRotate(axis: 'x' | 'y' | 'z', deltaRadians: number): void {
-  if (!this.state.selectedItemId || !this.sceneManager) {
-    console.warn(`[handleGizmoRotate] Invalid state:`, {
-      selectedItemId: this.state.selectedItemId,
-      hasSceneManager: !!this.sceneManager,
-    });
-    return;
+    } else {
+      console.log("[handleSelectItem] ❌ Furniture not found:", id);
+    }
   }
 
-  const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
-  if (!furniture) {
-    console.warn(`[handleGizmoRotate] Furniture not found:`, this.state.selectedItemId);
-    return;
+  handleGizmoMove(axis: "x" | "y" | "z", delta: number): void {
+    if (!this.state.selectedItemId || !this.sceneManager) {
+      console.warn(`[handleGizmoMove] Invalid state:`, {
+        selectedItemId: this.state.selectedItemId,
+        hasSceneManager: !!this.sceneManager,
+      });
+      return;
+    }
+
+    const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
+    if (!furniture) {
+      console.warn(
+        `[handleGizmoMove] Furniture not found:`,
+        this.state.selectedItemId,
+      );
+      return;
+    }
+
+    const currentPos = furniture.getPosition();
+    const newPos: [number, number, number] = [...currentPos];
+
+    switch (axis) {
+      case "x":
+        newPos[0] += delta;
+        break;
+      case "y":
+        newPos[1] += delta;
+        break;
+      case "z":
+        newPos[2] += delta;
+        break;
+    }
+
+    this.sceneManager
+      .moveFurniture(this.state.selectedItemId, newPos, false, false)
+      .then((result) => {
+        if (result.success) {
+          this.updateState({ gizmoPosition: newPos });
+        } else if (result.needsConfirmation) {
+          this.pendingMove = newPos;
+          this.updateState({ showMoveCloserPanel: true });
+        } else {
+          console.warn(`[handleGizmoMove] ❌ Move failed:`, result.reason);
+        }
+      })
+      .catch((err) => {
+        console.error(`[handleGizmoMove] Error:`, err);
+      });
   }
 
-  const currentRot = furniture.getRotation();
-  const newRot: [number, number, number] = [...currentRot];
+  handleGizmoRotate(axis: "x" | "y" | "z", deltaRadians: number): void {
+    if (!this.state.selectedItemId || !this.sceneManager) {
+      console.warn(`[handleGizmoRotate] Invalid state:`, {
+        selectedItemId: this.state.selectedItemId,
+        hasSceneManager: !!this.sceneManager,
+      });
+      return;
+    }
 
-  switch (axis) {
-    case 'x':
-      newRot[0] += deltaRadians;
-      break;
-    case 'y':
-      newRot[1] += deltaRadians;
-      break;
-    case 'z':
-      newRot[2] += deltaRadians;
-      break;
+    const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
+    if (!furniture) {
+      console.warn(
+        `[handleGizmoRotate] Furniture not found:`,
+        this.state.selectedItemId,
+      );
+      return;
+    }
+
+    const currentRot = furniture.getRotation();
+    const newRot: [number, number, number] = [...currentRot];
+
+    switch (axis) {
+      case "x":
+        newRot[0] += deltaRadians;
+        break;
+      case "y":
+        newRot[1] += deltaRadians;
+        break;
+      case "z":
+        newRot[2] += deltaRadians;
+        break;
+    }
+
+    this.sceneManager.rotateFurniture(this.state.selectedItemId, newRot);
+
+    const twoPi = Math.PI * 2;
+    let normalizedRotation = newRot[1] % twoPi;
+    if (normalizedRotation < 0) normalizedRotation += twoPi;
+    this.updateState({ rotationValue: normalizedRotation });
   }
-
-  this.sceneManager.rotateFurniture(this.state.selectedItemId, newRot);
-
-  const twoPi = Math.PI * 2;
-  let normalizedRotation = newRot[1] % twoPi;
-  if (normalizedRotation < 0) normalizedRotation += twoPi;
-  this.updateState({ rotationValue: normalizedRotation });
-}
 
   handleToggleWallPlacement(camera: THREE.Camera): void {
     if (!this.state.selectedItemId || !this.sceneManager) {
-      this.showNotificationMessage('Please select a furniture item first', 'info');
+      this.showNotificationMessage(
+        "Please select a furniture item first",
+        "info",
+      );
       return;
     }
 
@@ -1597,45 +1660,55 @@ handleSelectItem(id: string): void {
     if (!furniture) return;
 
     if (!furniture.isWallMountable()) {
-      this.showNotificationMessage('This item cannot be wall-mounted', 'info');
+      this.showNotificationMessage("This item cannot be wall-mounted", "info");
       return;
     }
 
-    const result = this.sceneManager.toggleWallPlacement(this.state.selectedItemId, camera);
+    const result = this.sceneManager.toggleWallPlacement(
+      this.state.selectedItemId,
+      camera,
+    );
 
     if (result.success) {
       const newPosition = furniture.getPosition();
-      
+
       this.updateState({
         selectedItemPlacementMode: result.placementMode,
         gizmoPosition: this.state.showTransformGizmo ? newPosition : null,
-        rotationGizmoPosition: this.state.showRotationGizmo ? newPosition : null,
+        rotationGizmoPosition: this.state.showRotationGizmo
+          ? newPosition
+          : null,
       });
 
       this.showNotificationMessage(
-        result.placementMode === 'wall' ? '📌 Item placed on wall' : '📦 Item placed on floor',
-        'success'
+        result.placementMode === "wall"
+          ? "📌 Item placed on wall"
+          : "📦 Item placed on floor",
+        "success",
       );
     } else {
-      this.showNotificationMessage(result.message || 'Failed to toggle placement', 'error');
+      this.showNotificationMessage(
+        result.message || "Failed to toggle placement",
+        "error",
+      );
     }
   }
 
- handleScaleChange(newScale: number): void {
+  handleScaleChange(newScale: number): void {
+    const clampedScale = Math.max(0.5, Math.min(3, newScale));
+    this.updateState({ sliderValue: clampedScale });
 
-  const clampedScale = Math.max(0.5, Math.min(3, newScale));
-  this.updateState({ sliderValue: clampedScale });
-  
-  if (this.state.selectedItemId && this.sceneManager) {
-    this.sceneManager.scaleFurniture(this.state.selectedItemId, clampedScale);
- 
+    if (this.state.selectedItemId && this.sceneManager) {
+      this.sceneManager.scaleFurniture(this.state.selectedItemId, clampedScale);
+    }
   }
-}
 
   handleRotationSliderChange(newRotation: number): void {
     this.updateState({ rotationValue: newRotation });
     if (this.state.selectedItemId && this.sceneManager) {
-      const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
+      const furniture = this.sceneManager.getFurniture(
+        this.state.selectedItemId,
+      );
       if (furniture) {
         const currentRot = furniture.getRotation();
         this.sceneManager.rotateFurniture(this.state.selectedItemId, [
@@ -1649,7 +1722,9 @@ handleSelectItem(id: string): void {
 
   getPlacedCatalogIds(): string[] {
     if (!this.sceneManager) return [];
-    return this.sceneManager.getAllFurniture().map(item => item.getId().split('-')[0]);
+    return this.sceneManager
+      .getAllFurniture()
+      .map((item) => item.getId().split("-")[0]);
   }
 
   updateFrame(session: any, camera: THREE.Camera, delta: number): void {
@@ -1657,16 +1732,17 @@ handleSelectItem(id: string): void {
 
     this.navigationController?.update(session, camera, delta);
 
-    if (!this.state.navigationMode && this.state.selectedItemId && this.furnitureController) {
+    if (
+      !this.state.navigationMode &&
+      this.state.selectedItemId &&
+      this.furnitureController
+    ) {
       this.furnitureController.update(session, camera, delta);
     }
 
     this.sceneManager?.updateAnimations(delta);
   }
-
-
 }
-
 
 export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
   const navigate = useNavigate();
@@ -1694,15 +1770,15 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
     rotationValue: 0,
     furnitureCatalog: [],
     catalogLoading: false,
-    showSidebar: true, 
-    sidebarActiveItem: null, 
-    showTransformGizmo: false, 
-    gizmoPosition: null, 
-    showRotationGizmo: false,  
-    rotationGizmoPosition: null, 
+    showSidebar: true,
+    sidebarActiveItem: null,
+    showTransformGizmo: false,
+    gizmoPosition: null,
+    showRotationGizmo: false,
+    rotationGizmoPosition: null,
     showScalePanel: false,
     selectedItemWallMountable: false,
-    selectedItemPlacementMode: 'floor',
+    selectedItemPlacementMode: "floor",
     showTexturePanel: false,
     textureOptions: [],
     selectedFurnitureTextureId: undefined,
@@ -1717,9 +1793,11 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
   const logicRef = useRef<SceneContentLogic | null>(null);
 
   useEffect(() => {
-    const updateState = (update: Partial<SceneState> | ((prev: SceneState) => Partial<SceneState>)) => {
-      setState(prev => {
-        const newState = typeof update === 'function' ? update(prev) : update;
+    const updateState = (
+      update: Partial<SceneState> | ((prev: SceneState) => Partial<SceneState>),
+    ) => {
+      setState((prev) => {
+        const newState = typeof update === "function" ? update(prev) : update;
         return { ...prev, ...newState };
       });
     };
@@ -1737,7 +1815,6 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
     logicRef.current.setupXRRig(scene, camera);
   }, [xr.session, scene, camera]);
 
-
   useEffect(() => {
     if (!logicRef.current) return;
     logicRef.current.loadHome(digitalHome);
@@ -1748,7 +1825,6 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
     logicRef.current.loadFurnitureCatalog();
   }, []);
 
-
   useEffect(() => {
     if (!logicRef.current || logicRef.current.modelUrlCache.size === 0) return;
     logicRef.current.loadDeployedItems();
@@ -1756,9 +1832,9 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
 
   useFrame((_state, delta) => {
     if (!logicRef.current) return;
-    
+
     logicRef.current.sceneManager?.updateAnimations(delta);
-    
+
     const session = xr.session;
     if (!session) return;
     logicRef.current.updateFrame(session, camera, delta);
@@ -1767,10 +1843,11 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
   if (!logicRef.current) return null;
 
   const logic = logicRef.current;
-  const uiLocked = state.showFurniture || 
-    state.showControlPanel || 
-    state.showInstructions || 
-    state.showSlider || 
+  const uiLocked =
+    state.showFurniture ||
+    state.showControlPanel ||
+    state.showInstructions ||
+    state.showSlider ||
     state.showNotification ||
     state.showMoveCloserPanel ||
     state.showScalePanel ||
@@ -1799,93 +1876,100 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
       <ambientLight intensity={0.5} />
       <directionalLight position={[5, 5, 5]} intensity={1} />
       <Environment preset="warehouse" />
-
       <group position={[0, 0, 0]}>
-      {logic.sceneManager && (
-        <>
-          {logic.sceneManager.getHomeModel() && (
-            <primitive object={logic.sceneManager.getHomeModel()!.getGroup()} />
-          )}
-          
-          {logic.sceneManager.getAllFurniture().map((furniture) => (
-            <primitive
-              key={furniture.getId()}
-              object={furniture.getGroup()}
-              onClick={(e: any) => {
-             
-                let target = e.object;
-                let isGizmoClick = false;
-                let depth = 0;
+        {logic.sceneManager && (
+          <>
+            {logic.sceneManager.getHomeModel() && (
+              <primitive
+                object={logic.sceneManager.getHomeModel()!.getGroup()}
+              />
+            )}
 
-                while (target && depth < 10) {
-                  console.log(`[FURNITURE-CLICK] Checking object at depth ${depth}:`, {
-                    name: target.name,
-                    type: target.type,
-                    isGizmo: target.userData?.isGizmo,
-                  });
+            {logic.sceneManager.getAllFurniture().map((furniture) => (
+              <primitive
+                key={furniture.getId()}
+                object={furniture.getGroup()}
+                onClick={(e: any) => {
+                  let target = e.object;
+                  let isGizmoClick = false;
+                  let depth = 0;
 
-                  if (target.userData?.isGizmo) {
-                    
-                    isGizmoClick = true;
-                    break;
+                  while (target && depth < 10) {
+                    console.log(
+                      `[FURNITURE-CLICK] Checking object at depth ${depth}:`,
+                      {
+                        name: target.name,
+                        type: target.type,
+                        isGizmo: target.userData?.isGizmo,
+                      },
+                    );
+
+                    if (target.userData?.isGizmo) {
+                      isGizmoClick = true;
+                      break;
+                    }
+
+                    target = target.parent;
+                    depth++;
                   }
 
-                  target = target.parent;
-                  depth++;
+                  if (isGizmoClick) {
+                    e.stopPropagation();
+                    return;
+                  }
+
+                  if (!state.navigationMode && !uiLocked) {
+                    e.stopPropagation();
+                    logic.handleSelectItem(furniture.getId());
+                  }
+                }}
+              />
+            ))}
+
+            {state.showTransformGizmo && state.gizmoPosition && (
+              <TransformGizmo
+                position={state.gizmoPosition}
+                visible={state.showTransformGizmo}
+                onMove={(axis, delta) => logic.handleGizmoMove(axis, delta)}
+              />
+            )}
+
+            {state.showRotationGizmo && state.rotationGizmoPosition && (
+              <RotationGizmo
+                position={state.rotationGizmoPosition}
+                visible={state.showRotationGizmo}
+                onRotate={(axis, deltaRadians) =>
+                  logic.handleGizmoRotate(axis, deltaRadians)
                 }
-
-          
-                if (isGizmoClick) {
-                 
-                  e.stopPropagation();
-                  return; 
+                currentRotation={
+                  logic.sceneManager && state.selectedItemId
+                    ? logic.sceneManager
+                        .getFurniture(state.selectedItemId)
+                        ?.getRotation() || [0, 0, 0]
+                    : [0, 0, 0]
                 }
-
-                if (!state.navigationMode && !uiLocked) {
-                  e.stopPropagation();
-                  logic.handleSelectItem(furniture.getId());
-                }
-              }}
-            />
-          ))}
-
-          {state.showTransformGizmo && state.gizmoPosition && (
-            <TransformGizmo
-              position={state.gizmoPosition}
-              visible={state.showTransformGizmo}
-              onMove={(axis, delta) => logic.handleGizmoMove(axis, delta)}
-            />
-          )}
-
-       
-          {state.showRotationGizmo && state.rotationGizmoPosition && (
-            <RotationGizmo
-              position={state.rotationGizmoPosition}
-              visible={state.showRotationGizmo}
-              onRotate={(axis, deltaRadians) => logic.handleGizmoRotate(axis, deltaRadians)}
-              currentRotation={
-                logic.sceneManager && state.selectedItemId
-                  ? logic.sceneManager.getFurniture(state.selectedItemId)?.getRotation() || [0, 0, 0]
-                  : [0, 0, 0]
-              }
-            />
-          )}
-        </>
-      )}
-    </group>
-      
+              />
+            )}
+          </>
+        )}
+      </group>
       <CatalogToggle onToggle={() => logic.handleToggleUI()} />
       <ControlPanelToggle onToggle={() => logic.handleToggleControlPanel()} />
-
-      <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showInstructions}>
-        <VRInstructionPanel 
-          show={state.showInstructions} 
-          onClose={() => logic.updateState({ showInstructions: false })} 
+      <HeadLockedUI
+        distance={1.6}
+        verticalOffset={0}
+        enabled={state.showInstructions}
+      >
+        <VRInstructionPanel
+          show={state.showInstructions}
+          onClose={() => logic.updateState({ showInstructions: false })}
         />
       </HeadLockedUI>
-     
-
-      <HeadLockedUI distance={1.7} verticalOffset={0} enabled={state.showFurniture}>
+      <HeadLockedUI
+        distance={1.7}
+        verticalOffset={0}
+        enabled={state.showFurniture}
+      >
         <VRFurniturePanel
           show={state.showFurniture}
           catalog={state.furnitureCatalog}
@@ -1895,8 +1979,11 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
           onClose={() => logic.updateState({ showFurniture: false })}
         />
       </HeadLockedUI>
-
-      <HeadLockedUI distance={1.7} verticalOffset={0} enabled={state.showControlPanel}>
+      <HeadLockedUI
+        distance={1.7}
+        verticalOffset={0}
+        enabled={state.showControlPanel}
+      >
         <VRControlPanel
           show={state.showControlPanel}
           onSave={() => logic.handleSaveScene()}
@@ -1907,18 +1994,28 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
           onClose={() => logic.updateState({ showControlPanel: false })}
         />
       </HeadLockedUI>
-
-
-      <HeadLockedUI distance={1.4} verticalOffset={0} enabled={state.showNotification}>
+      <HeadLockedUI
+        distance={1.4}
+        verticalOffset={0}
+        enabled={state.showNotification}
+      >
         <VRNotificationPanel
           show={state.showNotification}
           message={state.notificationMessage}
           type={state.notificationType}
-          onClose={() => logic.updateState({ showNotification: false, notificationFromControlPanel: false })}
+          onClose={() =>
+            logic.updateState({
+              showNotification: false,
+              notificationFromControlPanel: false,
+            })
+          }
         />
       </HeadLockedUI>
-
-      <HeadLockedUI distance={1.5} verticalOffset={0} enabled={state.showMoveCloserPanel}>
+      <HeadLockedUI
+        distance={1.5}
+        verticalOffset={0}
+        enabled={state.showMoveCloserPanel}
+      >
         <VRPreciseCollisionPanel
           show={state.showMoveCloserPanel}
           onConfirm={() => logic.handleConfirmMoveCloser()}
@@ -1928,8 +2025,11 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
           message="The furniture is close to another object. Do you want to move it closer?"
         />
       </HeadLockedUI>
-
-      <HeadLockedUI distance={1.5} verticalOffset={0} enabled={state.showPreciseCheckPanel}>
+      <HeadLockedUI
+        distance={1.5}
+        verticalOffset={0}
+        enabled={state.showPreciseCheckPanel}
+      >
         <VRPreciseCollisionPanel
           show={state.showPreciseCheckPanel}
           onConfirm={() => logic.handleConfirmPreciseCheck()}
@@ -1939,8 +2039,11 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
           message="Run precise API check to verify overlap? (Click No to move back to safe position)"
         />
       </HeadLockedUI>
-
-      <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showScalePanel}>
+      <HeadLockedUI
+        distance={1.6}
+        verticalOffset={0}
+        enabled={state.showScalePanel}
+      >
         {state.selectedItemId && (
           <ScaleControlPanel
             show={state.showScalePanel}
@@ -1951,21 +2054,29 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
           />
         )}
       </HeadLockedUI>
-
-      <HeadLockedUI distance={1.4} verticalOffset={0} enabled={state.showSidebar}>
-        <group position={[-0.8, 0, 0]}> 
+      <HeadLockedUI
+        distance={1.4}
+        verticalOffset={0}
+        enabled={state.showSidebar}
+      >
+        <group position={[-0.8, 0, 0]}>
           <VRSidebar
             show={state.showSidebar}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
-            showWallToggle={state.selectedItemWallMountable && state.selectedItemId !== null}
-            isOnWall={state.selectedItemPlacementMode === 'wall'}
+            showWallToggle={
+              state.selectedItemWallMountable && state.selectedItemId !== null
+            }
+            isOnWall={state.selectedItemPlacementMode === "wall"}
             onWallToggle={() => logic.handleToggleWallPlacement(camera)}
           />
         </group>
       </HeadLockedUI>
-
-      <HeadLockedUI distance={1.3} verticalOffset={0} enabled={state.showTexturePanel}>
-        <group position={[1, 0, 0]}> 
+      <HeadLockedUI
+        distance={1.3}
+        verticalOffset={0}
+        enabled={state.showTexturePanel}
+      >
+        <group position={[1, 0, 0]}>
           <TextureSelectorPanel
             show={state.showTexturePanel}
             onSelectTexture={(id, path) => logic.handleSelectTexture(id, path)}
@@ -1976,25 +2087,31 @@ export function SceneContent({ homeId, digitalHome }: SceneContentProps) {
           />
         </group>
       </HeadLockedUI>
-
-      <HeadLockedUI distance={1.3} verticalOffset={0} enabled={state.showEnvironmentPanel}>
-    `  <group position={[0, 0, 0]}>
-        <EnvironmentSelectorPanel
-          show={state.showEnvironmentPanel}
-          onSelectFloor={(id, path) => logic.handleSelectFloorTexture(id, path)}
-          onSelectWall={(id, path) => logic.handleSelectWallTexture(id, path)}
-          onClose={() => logic.updateState({ showEnvironmentPanel: false })}
-          floorTextures={state.floorTextures}
-          wallTextures={state.wallTextures}
-          selectedFloorId={state.selectedFloorId}
-          selectedWallId={state.selectedWallId}
-          loadingFloor={state.loadingEnvironment}
-          loadingWall={state.loadingEnvironment}
-          title="Environment Settings"
-        />
-      </group>
-    </HeadLockedUI>`
-
+      <HeadLockedUI
+        distance={1.3}
+        verticalOffset={0}
+        enabled={state.showEnvironmentPanel}
+      >
+        `{" "}
+        <group position={[0, 0, 0]}>
+          <EnvironmentSelectorPanel
+            show={state.showEnvironmentPanel}
+            onSelectFloor={(id, path) =>
+              logic.handleSelectFloorTexture(id, path)
+            }
+            onSelectWall={(id, path) => logic.handleSelectWallTexture(id, path)}
+            onClose={() => logic.updateState({ showEnvironmentPanel: false })}
+            floorTextures={state.floorTextures}
+            wallTextures={state.wallTextures}
+            selectedFloorId={state.selectedFloorId}
+            selectedWallId={state.selectedWallId}
+            loadingFloor={state.loadingEnvironment}
+            loadingWall={state.loadingEnvironment}
+            title="Environment Settings"
+          />
+        </group>
+      </HeadLockedUI>
+      `
     </>
   );
 }
