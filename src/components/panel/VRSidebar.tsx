@@ -156,17 +156,11 @@ function SidebarItem({ item, yPos, isActive, onHover, onClick, isHovered }: Side
 interface VRSidebarProps {
   show: boolean;
   onItemSelect: (itemId: string) => void;
-  showWallToggle?: boolean;
-  isOnWall?: boolean;
-  onWallToggle?: () => void;
 }
 
 export function VRSidebar({
   show,
   onItemSelect,
-  showWallToggle = false,
-  isOnWall = false,
-  onWallToggle,
 }: VRSidebarProps) {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<string | null>(null);
@@ -174,24 +168,8 @@ export function VRSidebar({
   if (!show) return null;
 
   const sidebarItems: SidebarItemData[] = [...baseSidebarItems];
-  
-  if (showWallToggle) {
-    const movementIndex = sidebarItems.findIndex(item => item.id === 'movement');
-    sidebarItems.splice(movementIndex + 1, 0, {
-      id: "wallToggle",
-      icon: isOnWall ? "📌" : "🧱",
-      label: isOnWall ? "Move to Floor" : "Mount on Wall",
-      color: isOnWall ? "#EF4444" : "#06B6D4",
-      description: isOnWall ? "Place on floor" : "Mount on wall",
-      conditional: true,
-    });
-  }
 
   const handleItemClick = (itemId: string) => {
-    if (itemId === 'wallToggle') {
-      onWallToggle?.();
-      return;
-    }
     setActiveItem(itemId);
     onItemSelect(itemId);
   };

@@ -95,6 +95,8 @@ export class NavigationController extends XRControllerBase {
   private rig: THREE.Group | null = null;
   private isNavigating: boolean = false;
   private onNavigationModeChange?: (isActive: boolean) => void;
+  private homeModelGroup: THREE.Group | null = null;
+  private alignmentMode: boolean = false;
 
   constructor(
     config: ControllerConfig = {},
@@ -110,6 +112,14 @@ export class NavigationController extends XRControllerBase {
 
   getRig(): THREE.Group | null {
     return this.rig;
+  }
+
+  setHomeModelGroup(homeModelGroup: THREE.Group | null): void {
+    this.homeModelGroup = homeModelGroup;
+  }
+
+  setAlignmentMode(enabled: boolean): void {
+    this.alignmentMode = enabled;
   }
 
   isNavigationActive(): boolean {
@@ -159,25 +169,50 @@ export class NavigationController extends XRControllerBase {
 
     if (!isGripPressed) return;
 
-    if (Math.abs(rotateInput) > 0) {
-      const rotationDelta = rotateInput * this.config.rotateSpeed * delta;
-      this.rig.rotateY(rotationDelta);
-    }
+    if (this.alignmentMode && this.homeModelGroup) {
+      // Alignment mode
+      if (Math.abs(rotateInput) > 0) {
+        const rotationDelta = -rotateInput * this.config.rotateSpeed * delta;
+        this.homeModelGroup.rotateY(rotationDelta);
+      }
 
-    if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
-      const forward = new THREE.Vector3();
-      camera.getWorldDirection(forward);
-      forward.y = 0;
-      forward.normalize();
+      if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
 
-      const right = new THREE.Vector3();
-      right.crossVectors(forward, camera.up).normalize();
+        const right = new THREE.Vector3();
+        right.crossVectors(forward, camera.up).normalize();
 
-      const movement = new THREE.Vector3();
-      movement.addScaledVector(forward, -moveZ * this.config.moveSpeed * delta);
-      movement.addScaledVector(right, moveX * this.config.moveSpeed * delta);
+        const movement = new THREE.Vector3();
+        movement.addScaledVector(forward, moveZ * this.config.moveSpeed * delta);
+        movement.addScaledVector(right, -moveX * this.config.moveSpeed * delta);
 
-      this.rig.position.add(movement);
+        this.homeModelGroup.position.add(movement);
+      }
+    } else if (this.rig) {
+      // Normal navigation mode
+      if (Math.abs(rotateInput) > 0) {
+        const rotationDelta = rotateInput * this.config.rotateSpeed * delta;
+        this.rig.rotateY(rotationDelta);
+      }
+
+      if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+
+        const right = new THREE.Vector3();
+        right.crossVectors(forward, camera.up).normalize();
+
+        const movement = new THREE.Vector3();
+        movement.addScaledVector(forward, -moveZ * this.config.moveSpeed * delta);
+        movement.addScaledVector(right, moveX * this.config.moveSpeed * delta);
+
+        this.rig.position.add(movement);
+      }
     }
   }
 
@@ -193,8 +228,11 @@ export class FurnitureEditController extends XRControllerBase {
   private onFurnitureMove?: (id: string, delta: THREE.Vector3) => void;
   private onFurnitureRotate?: (id: string, deltaY: number) => void;
   private onFurnitureDeselect?: (id: string) => void;
-  private onWallFurnitureMove?: (id: string, deltaVertical: number, deltaHorizontal: number) => void;
+  private onWallFurnitureMove?: (id: string, deltaVertical: number, deltaHorizontal: number, deltaInOut: number) => void;
   private isWallMountedCallback?: (id: string) => boolean;
+  private onUnmountFromWall?: (id: string) => void;
+  private verticalMovementMode: boolean = false;
+  private wasThumbstickPressed: boolean = false;
 
   constructor(
     config: ControllerConfig = {},
@@ -202,8 +240,9 @@ export class FurnitureEditController extends XRControllerBase {
       onFurnitureMove?: (id: string, delta: THREE.Vector3) => void;
       onFurnitureRotate?: (id: string, deltaY: number) => void;
       onFurnitureDeselect?: (id: string) => void;
-      onWallFurnitureMove?: (id: string, deltaVertical: number, deltaHorizontal: number) => void;
+      onWallFurnitureMove?: (id: string, deltaVertical: number, deltaHorizontal: number, deltaInOut: number) => void;
       isWallMounted?: (id: string) => boolean;
+      onUnmountFromWall?: (id: string) => void;
     }
   ) {
     super(config);
@@ -212,6 +251,7 @@ export class FurnitureEditController extends XRControllerBase {
     this.onFurnitureDeselect = callbacks?.onFurnitureDeselect;
     this.onWallFurnitureMove = callbacks?.onWallFurnitureMove;
     this.isWallMountedCallback = callbacks?.isWallMounted;
+    this.onUnmountFromWall = callbacks?.onUnmountFromWall;
   }
 
   setSelectedFurniture(id: string | null): void {
@@ -248,49 +288,78 @@ export class FurnitureEditController extends XRControllerBase {
 
     let moveX = 0;
     let moveZ = 0;
+    let moveY = 0;
     let rotateInput = 0;
 
     session.inputSources.forEach((source: any) => {
       const gamepad = source.gamepad;
       if (!gamepad) return;
 
+      // Handle thumbstick click to toggle vertical mode
+      const thumbstick_click = gamepad.buttons[3];
+      if (thumbstick_click && thumbstick_click.pressed) {
+        if (!this.wasThumbstickPressed) {
+          const previousMode = this.verticalMovementMode;
+          this.verticalMovementMode = !this.verticalMovementMode;
+          this.wasThumbstickPressed = true;
+          
+          if (this.verticalMovementMode && !previousMode && this.selectedFurnitureId) {
+            const isWallMounted = this.isWallMountedCallback?.(this.selectedFurnitureId) || false;
+            if (isWallMounted) {
+              this.onUnmountFromWall?.(this.selectedFurnitureId);
+            }
+          }
+        }
+      } else {
+        this.wasThumbstickPressed = false;
+      }
+
       if (source.handedness === "right" && gamepad.axes.length >= 4) {
         const x = this.getAxisValue(source, 2);
         const z = this.getAxisValue(source, 3);
-        if (this.isAxisActive(x)) moveX = x;
-        if (this.isAxisActive(z)) moveZ = z;
+        
+        if (!this.verticalMovementMode) {
+          if (this.isAxisActive(x)) moveX = x;  
+          if (this.isAxisActive(z)) moveZ = z;
+        } else {
+          if (this.isAxisActive(z)) moveY = -z;
+        }
       }
 
-      if (source.handedness === "left" && gamepad.axes.length >= 3) {
+      if (source.handedness === "left" && gamepad.axes.length >= 4) {
         const r = this.getAxisValue(source, 2);
         if (this.isAxisActive(r)) rotateInput = -r;
       }
     });
 
-    if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0) {
-      // Check if furniture is wall-mounted
-      const isWallMounted = this.isWallMountedCallback?.(this.selectedFurnitureId) || false;
-      
-      if (isWallMounted && this.onWallFurnitureMove) {
-        const deltaVertical = -moveZ * this.config.moveSpeed * delta;
-        const deltaHorizontal = moveX * this.config.moveSpeed * delta;
-        this.onWallFurnitureMove(this.selectedFurnitureId, deltaVertical, deltaHorizontal);
-      } else {
-        // Floor-based movement (original behavior)
-        const forward = new THREE.Vector3();
-        camera.getWorldDirection(forward);
-        forward.y = 0;
-        forward.normalize();
+    // Check if furniture is wall-mounted
+    const isWallMounted = this.isWallMountedCallback?.(this.selectedFurnitureId) || false;
+    
+    if (isWallMounted && !this.verticalMovementMode && this.onWallFurnitureMove && (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0 || Math.abs(moveY) > 0)) {
+      const deltaVertical = -moveZ * this.config.moveSpeed * delta;
+      const deltaHorizontal = moveX * this.config.moveSpeed * delta;
+      const deltaInOut = moveY * this.config.moveSpeed * delta;
+      this.onWallFurnitureMove(this.selectedFurnitureId, deltaVertical, deltaHorizontal, deltaInOut);
+    } else if (Math.abs(moveX) > 0 || Math.abs(moveZ) > 0 || Math.abs(moveY) > 0) {
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+      forward.y = 0;
+      forward.normalize();
 
-        const right = new THREE.Vector3();
-        right.crossVectors(forward, camera.up).normalize();
+      const right = new THREE.Vector3();
+      right.crossVectors(forward, camera.up).normalize();
 
-        const deltaPosition = new THREE.Vector3();
-        deltaPosition.addScaledVector(forward, -moveZ * this.config.moveSpeed * delta);
-        deltaPosition.addScaledVector(right, moveX * this.config.moveSpeed * delta);
+      const deltaPosition = new THREE.Vector3();
+      deltaPosition.addScaledVector(forward, -moveZ * this.config.moveSpeed * delta);
+      deltaPosition.addScaledVector(right, moveX * this.config.moveSpeed * delta);
+      deltaPosition.y = moveY * this.config.moveSpeed * delta;
 
-        this.onFurnitureMove?.(this.selectedFurnitureId, deltaPosition);
-      }
+      this.onFurnitureMove?.(this.selectedFurnitureId, deltaPosition);
+    }
+
+    if (Math.abs(rotateInput) > 0) {
+      const deltaRotation = rotateInput * this.config.rotateSpeed * delta;
+      this.onFurnitureRotate?.(this.selectedFurnitureId, deltaRotation);
     }
 
     if (Math.abs(rotateInput) > 0) {
@@ -301,6 +370,7 @@ export class FurnitureEditController extends XRControllerBase {
 
   reset(): void {
     this.selectedFurnitureId = null;
+    this.verticalMovementMode = false;
     this.prevButtonState.clear();
   }
 }

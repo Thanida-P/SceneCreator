@@ -118,9 +118,10 @@ export class CollisionDetector {
                        box.max.x > this.roomBox.max.x + this.EPSILON;
     const isOutsideZ = box.min.z < this.roomBox.min.z - this.EPSILON || 
                        box.max.z > this.roomBox.max.z + this.EPSILON;
-    const isThroughCeiling = box.max.y > this.roomBox.max.y + this.EPSILON;
+    const isOutsideY = box.min.y < this.roomBox.min.y - (this.EPSILON + 0.1) || 
+                       box.max.y >= this.roomBox.max.y;
     
-    const hasCollision = isOutsideX || isOutsideZ || isThroughCeiling;
+    const hasCollision = isOutsideX || isOutsideZ || isOutsideY;
     
     if (!hasCollision) {
       return { hasCollision: false, collidingObjects: [] };
@@ -141,6 +142,18 @@ export class CollisionDetector {
       collidingObjects: ['room'],
       collisionNormal: normal,
     };
+  }
+
+  checkRoomFloor(itemId: string): boolean {
+    const box = this.furnitureBoxes.get(itemId);
+    
+    if (!box || !this.roomBox) {
+      return false;
+    }
+
+    const onFloor = box.min.y <= this.roomBox.min.y;
+    
+    return onFloor;
   }
 
   checkAABBCollisionOnly(itemId: string): boolean {
