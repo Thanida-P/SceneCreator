@@ -841,13 +841,14 @@ class SceneContentLogic {
     const newTransparent = !this.state.homeTransparent;
     
     if (newTransparent && this.xrStore) {
+      // Switch to AR mode
       try {
         if (navigator.xr && (navigator.xr as any).isSessionSupported) {
           const isARSupported = await (navigator.xr as any).isSessionSupported('immersive-ar');
           
           if (isARSupported) {
             const currentSession = this.xrStore.getState().session;
-            if (currentSession && currentSession.mode !== 'immersive-ar') {
+            if (currentSession && (currentSession as any).mode !== 'immersive-ar') {
               const session = await (navigator.xr as any).requestSession('immersive-ar', {
                 requiredFeatures: ['local-floor'],
                 optionalFeatures: ['bounded-floor', 'hand-tracking', 'layers']
@@ -863,6 +864,18 @@ class SceneContentLogic {
         }
       } catch (err) {
         console.warn('Failed to switch to AR mode:', err);
+      }
+    } else if (!newTransparent && this.xrStore) {
+      // Switch to VR mode
+      try {
+        const currentSession = this.xrStore.getState().session;
+        if (currentSession && (currentSession as any).mode === 'immersive-ar') {
+          await currentSession.end();
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await this.xrStore.enterVR();
+        }
+      } catch (err) {
+        console.warn('Failed to switch to VR mode:', err);
       }
     }
     
