@@ -30,6 +30,7 @@ export function AlignmentLineVisualization({
   // Initialize AR hit test source
   React.useEffect(() => {
     if (!visible || !xr.session) {
+      // Cleanup when not visible
       if (hitTestSourceRef.current) {
         hitTestSourceRef.current.cancel();
         hitTestSourceRef.current = null;
@@ -46,6 +47,7 @@ export function AlignmentLineVisualization({
           hitTestSourceRef.current = await (session as any).requestHitTestSource({ 
             space: viewerSpaceRef.current 
           });
+          console.log('AR hit test source initialized for alignment lines');
         }
       } catch (err) {
         console.warn('Failed to initialize AR hit test:', err);
@@ -66,6 +68,7 @@ export function AlignmentLineVisualization({
   useFrame((state, delta, frame?: XRFrame) => {
     if (!visible || !lineGroupRef.current) return;
 
+    // Get camera position and direction
     const cameraPosition = new THREE.Vector3();
     camera.getWorldPosition(cameraPosition);
     
@@ -75,6 +78,7 @@ export function AlignmentLineVisualization({
     let depth = targetDepth;
     let currentHitPoint: THREE.Vector3 | null = null;
 
+    // Use AR hit testing if available
     if (xr.session && frame && hitTestSourceRef.current && viewerSpaceRef.current && 
         (xr.session as any).mode === 'immersive-ar') {
       try {
@@ -85,6 +89,7 @@ export function AlignmentLineVisualization({
           const pose = hit.getPose(viewerSpaceRef.current);
           
           if (pose) {
+            // Convert XR pose to Three.js Vector3
             const xrMatrix = new THREE.Matrix4().fromArray(pose.transform.matrix);
             currentHitPoint = new THREE.Vector3().setFromMatrixPosition(xrMatrix);
             depth = cameraPosition.distanceTo(currentHitPoint);
@@ -93,9 +98,10 @@ export function AlignmentLineVisualization({
             setCurrentDepth(depth);
             onHitPointUpdate?.(currentHitPoint);
             
+            // Position the alignment line at the hit point
             lineGroupRef.current.position.copy(currentHitPoint);
             lineGroupRef.current.lookAt(cameraPosition);
-            return;
+            return; // Exit early if hit test succeeded
           }
         }
       } catch (err) {
@@ -103,6 +109,7 @@ export function AlignmentLineVisualization({
       }
     }
     
+    // Fallback: Use default depth if hit test not available or failed
     depth = targetDepth;
     const linePosition = cameraPosition.clone().addScaledVector(cameraDirection, depth);
     lineGroupRef.current.position.copy(linePosition);
@@ -111,6 +118,7 @@ export function AlignmentLineVisualization({
 
   if (!visible) return null;
 
+  // Create corner lines (L-shape representing a corner)
   const lineLength = 0.5;
   const lineThickness = 0.02;
 
@@ -157,6 +165,17 @@ export function AlignmentLineVisualization({
         outlineColor="#000000"
       >
         {instruction}
+      </Text>
+
+      {/* Depth indicator */}
+      <Text
+        position={[0, -0.2, 0]}
+        fontSize={0.06}
+        color="#CCCCCC"
+        anchorX="center"
+        anchorY="middle"
+      >
+        Depth: {currentDepth.toFixed(2)}m
       </Text>
     </group>
   );

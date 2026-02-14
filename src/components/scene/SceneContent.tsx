@@ -25,6 +25,7 @@ import { RotationGizmo } from "../panel/RotationGizmo";
 import { VRAlignmentPanel, VRAlignmentConfirmPanel } from "../panel/VRAlignmentPanel";
 import { CornerSelectionVisualization } from "../panel/CornerSelectionVisualization";
 import { AlignmentLineVisualization } from "../panel/AlignmentLineVisualization";
+import { AlignmentInstructionPanel } from "../panel/AlignmentInstructionPanel";
 import { ARSessionHandler } from "./ARSessionHandler";
 
 
@@ -104,10 +105,10 @@ class SceneContentLogic {
   public modelUrlCache: Map<number, string> = new Map();
   private prevTriggerState: Map<number, boolean> = new Map();
   private xrStore: any = null;
-  private isRequestingAR: boolean = false;
-  private cornerSelectionReady: boolean = false;
-  private alignmentReady: boolean = false;
-  private initialXRMode: 'vr' | 'ar' | null = null;
+  private isRequestingAR: boolean = false; // Prevent multiple simultaneous AR requests
+  private cornerSelectionReady: boolean = false; // Flag to prevent corner selection until UI is ready
+  private alignmentReady: boolean = false; // Flag to prevent alignment trigger until AR is initialized
+  private initialXRMode: 'vr' | 'ar' | null = null; // Track initial XR mode for confirmation step
 
   constructor(
     homeId: string,
@@ -234,7 +235,9 @@ class SceneContentLogic {
   }
 
   async requestARMode(): Promise<void> {
+    // Prevent multiple simultaneous requests
     if (this.isRequestingAR) {
+      console.log('AR request already in progress, skipping...');
       return;
     }
 
@@ -246,6 +249,7 @@ class SceneContentLogic {
     this.isRequestingAR = true;
 
     try {
+      // Check if AR is supported
       if (!navigator.xr || !(navigator.xr as any).isSessionSupported) {
         console.warn('XR not available');
         this.isRequestingAR = false;
@@ -259,17 +263,22 @@ class SceneContentLogic {
         return;
       }
 
+      // Get current session
       const currentSession = this.xrStore.getState().session;
       
+      // If already in AR mode, return
       if (currentSession && (currentSession as any).mode === 'immersive-ar') {
+        console.log('Already in AR mode');
         this.isRequestingAR = false;
         return;
       }
 
+      // Wait for renderer to be available
       let gl = this.xrStore.getState().gl;
       let retries = 0;
-      const maxRetries = 30;
+      const maxRetries = 30; // Increase retries
       
+      // Initial wait to let renderer initialize
       await new Promise(resolve => setTimeout(resolve, 200));
       
       while ((!gl || !gl.xr) && retries < maxRetries) {
@@ -277,6 +286,7 @@ class SceneContentLogic {
         gl = this.xrStore.getState().gl;
         retries++;
         if (gl && gl.xr) {
+          console.log(`Renderer available after ${retries} retries`);
           break;
         }
       }
@@ -291,6 +301,7 @@ class SceneContentLogic {
         return;
       }
 
+      // End current session if exists
       if (currentSession && (currentSession as any).mode !== 'immersive-ar') {
         try {
           if (!currentSession.ended) {
@@ -302,20 +313,25 @@ class SceneContentLogic {
         }
       }
 
+      // Request AR session
       const arSession = await (navigator.xr as any).requestSession('immersive-ar', {
         requiredFeatures: ['local-floor'],
         optionalFeatures: ['bounded-floor', 'hand-tracking', 'layers']
       });
 
+      // Set session on renderer
       if (gl && gl.xr) {
         await gl.xr.setSession(arSession);
         this.xrStore.setState({ session: arSession });
+        console.log('AR session started for alignment');
+        console.log('Environment blend mode:', (arSession as any).environmentBlendMode);
       } else {
         console.error('Renderer lost during session request');
         await arSession.end();
       }
     } catch (err) {
       console.error('Failed to request AR mode:', err);
+      // If it's a cancellation error, it means another request was made
       if (err instanceof Error && err.message.includes('cancelled')) {
         console.warn('AR session request was cancelled (likely called multiple times)');
       }
@@ -521,7 +537,8 @@ class SceneContentLogic {
 
   handleAlignmentModeSelect(mode: "world" | "free"): void {
     if (mode === "world") {
-      // model in VR mode
+      // Start automatic alignment
+      // First, show model in VR mode (not transparent)
       const homeModel = this.sceneManager?.getHomeModel();
       if (homeModel) {
         homeModel.setOpacity(1.0);
@@ -530,6 +547,7 @@ class SceneContentLogic {
       
       // Initialize automatic alignment
       if (this.navigationController && homeModel) {
+        // Ensure model group is ready
         const modelGroup = homeModel.getGroup();
         if (!modelGroup) {
           console.error('Model group not available');
@@ -540,6 +558,7 @@ class SceneContentLogic {
         const boundingBox = new THREE.Box3().setFromObject(modelGroup);
         if (boundingBox.isEmpty()) {
           console.warn('Bounding box is empty, waiting for model to load...');
+          // Wait a bit and try again
           setTimeout(() => {
             const retryBox = new THREE.Box3().setFromObject(modelGroup);
             if (!retryBox.isEmpty()) {
@@ -552,48 +571,63 @@ class SceneContentLogic {
 
         this.navigationController.setAlignmentCallbacks(
           (state, data) => {
+            console.log('Alignment state changed:', state);
+            // Only update alignmentState, let the specific state handlers manage other state
             this.updateState({ alignmentState: state });
-
+            
+            // Handle state changes
             if (state === 'selectingCorner') {
+              // Show corner selection UI - ensure model is visible
               if (homeModel) {
                 homeModel.setVisible(true);
                 homeModel.setOpacity(1.0);
                 homeModel.setTransparent(false);
               }
+              // Disable corner selection initially to prevent accidental selection
               this.cornerSelectionReady = false;
               this.updateState({
                 showCornerSelection: true,
                 showHeadTrackingAlignment: false,
                 homeTransparent: false,
               });
+              // Enable corner selection after a short delay to ensure UI is initialized
               setTimeout(() => {
                 this.cornerSelectionReady = true;
-              }, 500);
+                console.log('Corner selection ready');
+              }, 500); // Wait 500ms for corner indicators to initialize
             } else if (state === 'aligningFirstCorner') {
+              // Reset trigger state when transitioning to alignment mode
               this.prevTriggerState.clear();
+              // Disable alignment input until AR is ready
               this.alignmentReady = false;
               
+              // Switch to AR mode - hide model but keep it
               if (homeModel) {
                 homeModel.setVisible(false);
               }
               
-
+              // Update state first to show alignment UI
+              // Set alignmentARModeRequested to trigger ARSessionHandler
               this.updateState({
                 showCornerSelection: false,
                 showHeadTrackingAlignment: true,
                 homeTransparent: true,
-                alignmentARModeRequested: true,
+                alignmentARModeRequested: true, // Trigger AR mode via ARSessionHandler
               });
               
+              // Wait for AR session to be active before allowing alignment input
+              // Check for AR session activation
               if (this.xrStore) {
                 const checkARSession = setInterval(() => {
                   const session = this.xrStore?.getState()?.session;
                   if (session && (session as any).mode === 'immersive-ar') {
+                    console.log('AR session active, enabling alignment input');
                     this.alignmentReady = true;
                     clearInterval(checkARSession);
                   }
                 }, 100);
                 
+                // Timeout after 5 seconds
                 setTimeout(() => {
                   clearInterval(checkARSession);
                   if (!this.alignmentReady) {
@@ -602,59 +636,76 @@ class SceneContentLogic {
                   }
                 }, 5000);
               } else {
+                // If xrStore not available, enable after delay anyway
                 setTimeout(() => {
                   this.alignmentReady = true;
                 }, 1000);
               }
             } else if (state === 'aligningSecondCorner') {
+              // Reset trigger state for second corner alignment
               this.prevTriggerState.clear();
+              // Disable alignment input briefly to prevent accidental trigger from previous step
               this.alignmentReady = false;
               setTimeout(() => {
                 this.alignmentReady = true;
               }, 300);
+              // Continue in AR mode (ensure AR mode is still requested)
               this.updateState({ 
                 showHeadTrackingAlignment: true,
                 alignmentARModeRequested: true,
               });
             } else if (state === 'aligningThirdCorner') {
+              // Reset trigger state for third corner alignment
               this.prevTriggerState.clear();
+              // Disable alignment input briefly to prevent accidental trigger from previous step
               this.alignmentReady = false;
               setTimeout(() => {
                 this.alignmentReady = true;
+                console.log('Third corner alignment ready');
               }, 300);
+              // Continue in AR mode (ensure AR mode is still requested)
               this.updateState({ 
                 showHeadTrackingAlignment: true,
                 alignmentARModeRequested: true,
               });
             } else if (state === 'aligningFourthCorner') {
+              // Reset trigger state for fourth corner alignment
               this.prevTriggerState.clear();
+              // Disable alignment input briefly to prevent accidental trigger from previous step
               this.alignmentReady = false;
               setTimeout(() => {
                 this.alignmentReady = true;
+                console.log('Fourth corner alignment ready');
               }, 300);
+              // Continue in AR mode (ensure AR mode is still requested)
               this.updateState({ 
                 showHeadTrackingAlignment: true,
                 alignmentARModeRequested: true,
               });
             } else if (state === 'completed') {
-              // this still does not fully work
+              // Alignment complete - switch to VR mode to show model for confirmation
+              // End AR session if active and explicitly request VR mode
               const switchToVR = async () => {
                 const currentSession = this.xrStore?.getState()?.session;
                 
                 if (currentSession && (currentSession as any).mode === 'immersive-ar') {
                   try {
+                    // End AR session
                     await currentSession.end();
+                    // Wait for session to fully end
                     await new Promise(resolve => setTimeout(resolve, 800));
                   } catch (err: any) {
                     console.warn('Error ending AR session:', err);
                   }
                 }
                 
+                // Explicitly request VR mode
                 try {
                   if (navigator.xr && (navigator.xr as any).isSessionSupported) {
                     const isVRSupported = await (navigator.xr as any).isSessionSupported('immersive-vr');
                     if (isVRSupported) {
                       await this.xrStore.enterVR();
+                      console.log('Switched to VR mode for confirmation');
                     } else {
                       console.warn('VR not supported');
                     }
@@ -664,12 +715,13 @@ class SceneContentLogic {
                 }
               };
               
+              // Switch to VR asynchronously
               switchToVR();
               
-              // Show model with new alignment
+              // Show model in VR mode for confirmation
               if (homeModel) {
                 homeModel.setVisible(true);
-                homeModel.setOpacity(1.0);
+                homeModel.setOpacity(1.0); // Full opacity in VR for confirmation
                 homeModel.setTransparent(false);
               }
               
@@ -679,22 +731,31 @@ class SceneContentLogic {
                 showCornerSelection: false,
                 showInstructions: true,
                 showSidebar: true,
-                showAlignmentConfirm: true,
-                alignmentARModeRequested: false,
-                homeTransparent: false,
+                showAlignmentConfirm: true, // Show confirmation panel
+                alignmentARModeRequested: false, // Stop requesting AR mode
+                homeTransparent: false, // VR mode for confirmation
               });
               
+              // Show success notification
               this.showNotificationMessage(
                 '✅ Alignment complete! Please confirm the position.',
                 'success'
               );
             }
           },
+          (transform) => {
+            // Alignment complete callback
+            console.log('Alignment complete:', transform);
+          }
         );
         
+        // Reset trigger state to prevent accidental corner selection from button press used to enter alignment
+        // Clear and wait a moment to ensure button state is reset
         this.prevTriggerState.clear();
-        this.cornerSelectionReady = false;
-
+        this.cornerSelectionReady = false; // Disable corner selection until ready
+        
+        // Set initial state for corner selection BEFORE starting alignment
+        // This ensures the UI is ready when the callback fires
         this.updateState({
           alignmentMode: "world",
           alignmentStatus: "aligning",
@@ -703,11 +764,14 @@ class SceneContentLogic {
           showCornerSelection: true,
           showHeadTrackingAlignment: false,
           alignmentState: 'selectingCorner',
-          homeTransparent: false,
+          homeTransparent: false, // Start in VR mode for corner selection
         });
         
+        // Start automatic alignment - this will trigger the callback with 'selectingCorner' state
+        // The callback will maintain the showCornerSelection state and enable selection after delay
         this.navigationController.startAutomaticAlignment();
       } else {
+        // If navigation controller or home model not available, still set state
         this.updateState({
           alignmentMode: "world",
           alignmentStatus: "aligning",
@@ -720,6 +784,7 @@ class SceneContentLogic {
         });
       }
     } else {
+      // Free roam mode - skip alignment
       if (this.state.homeTransparent) {
         this.sceneManager?.getHomeModel()?.setOpacity(0.0);
       }
@@ -734,17 +799,18 @@ class SceneContentLogic {
     }
   }
 
-  // not fully working yet
   handleAlignmentConfirm(): void {
     const homeModel = this.sceneManager?.getHomeModel();
     
+    // If started in AR mode, switch back to AR; otherwise stay in VR
     if (this.initialXRMode === 'ar') {
+      // Switch back to AR mode
       this.updateState({
         alignmentStatus: "aligned",
         showAlignmentConfirm: false,
         showInstructions: true,
         showSidebar: true,
-        alignmentARModeRequested: true,
+        alignmentARModeRequested: true, // Request AR mode again
         homeTransparent: true,
       });
       
@@ -753,6 +819,7 @@ class SceneContentLogic {
         homeModel.setTransparent(true);
       }
     } else {
+      // Stay in VR mode
       if (this.state.homeTransparent) {
         homeModel?.setOpacity(0.0);
       }
@@ -765,6 +832,7 @@ class SceneContentLogic {
       });
     }
     
+    // Reset initial mode tracking
     this.initialXRMode = null;
   }
 
@@ -798,18 +866,21 @@ class SceneContentLogic {
       alignmentARModeRequested: false,
     });
     
+    // Reset initial mode tracking
     this.initialXRMode = null;
   }
 
   handleCornerSelect(cornerIndex: number): void {
+    // Prevent corner selection until UI is ready
     if (!this.cornerSelectionReady) {
+      console.log('Corner selection not ready yet, ignoring selection');
       return;
     }
     
     if (this.navigationController) {
       this.navigationController.selectCorner(cornerIndex);
     }
-    this.cornerSelectionReady = false;
+    this.cornerSelectionReady = false; // Disable further selections
     this.updateState({
       showCornerSelection: false,
     });
@@ -817,6 +888,15 @@ class SceneContentLogic {
 
   handleConfirmAlignmentPoint(): void {
     if (!this.navigationController) return;
+    
+    const state = this.navigationController.getAlignmentState();
+    const alignmentData = this.navigationController.getAlignmentData();
+    
+    if (state === 'aligningFirstCorner' || state === 'aligningSecondCorner' || state === 'aligningThirdCorner') {
+      // Get current head tracking position
+      // This will be updated in the frame loop
+      // For now, we'll use a placeholder - the actual position will come from head tracking
+    }
   }
 
   handleToggleAlignmentMode(): void {
@@ -845,14 +925,17 @@ class SceneContentLogic {
  
     const newTransparent = !this.state.homeTransparent;
     
+    // If switching to AR mode, request AR session
     if (newTransparent && this.xrStore) {
       try {
+        // Check if AR is supported
         if (navigator.xr && (navigator.xr as any).isSessionSupported) {
           const isARSupported = await (navigator.xr as any).isSessionSupported('immersive-ar');
           
           if (isARSupported) {
             const currentSession = this.xrStore.getState().session;
             if (currentSession && currentSession.mode !== 'immersive-ar') {
+              // Request AR session
               const session = await (navigator.xr as any).requestSession('immersive-ar', {
                 requiredFeatures: ['local-floor'],
                 optionalFeatures: ['bounded-floor', 'hand-tracking', 'layers']
@@ -1367,6 +1450,7 @@ private handleFurnitureDeselect(id: string): void {
   this.sceneManager.moveFurniture(this.state.selectedItemId, newPos, false, false)
     .then((result) => {
       if (result.success) {
+        // Update gizmo position to match furniture
         this.updateState({ gizmoPosition: newPos });
       } else if (result.needsConfirmation) {
         this.pendingMove = newPos;
@@ -1464,6 +1548,7 @@ private handleFurnitureDeselect(id: string): void {
         camera.getWorldDirection(cameraDirection);
         raycaster.set(cameraPosition, cameraDirection);
 
+        // Get corner positions
         const box = new THREE.Box3().setFromObject(homeModel.getGroup());
         const maxY = box.max.y;
         const corners = [
@@ -1473,12 +1558,13 @@ private handleFurnitureDeselect(id: string): void {
           new THREE.Vector3(box.min.x, maxY, box.max.z).applyMatrix4(homeModel.getGroup().matrixWorld),
         ];
 
+        // Check which corner the user is looking at
         let closestCornerIndex = -1;
         let closestDistance = Infinity;
         corners.forEach((corner, index) => {
           const directionToCorner = corner.clone().sub(cameraPosition).normalize();
           const dot = cameraDirection.dot(directionToCorner);
-          if (dot > 0.9) {
+          if (dot > 0.9) { // User is looking roughly at this corner
             const distance = cameraPosition.distanceTo(corner);
             if (distance < closestDistance) {
               closestDistance = distance;
@@ -1487,6 +1573,7 @@ private handleFurnitureDeselect(id: string): void {
           }
         });
 
+        // Check for button press to select corner (only if selection is ready)
         if (this.cornerSelectionReady) {
           session.inputSources.forEach((source: any, index: number) => {
             const gamepad = source.gamepad;
@@ -1508,44 +1595,59 @@ private handleFurnitureDeselect(id: string): void {
     // Handle head tracking alignment
     if (this.state.showHeadTrackingAlignment && this.navigationController && this.sceneManager) {
       const raycaster = new THREE.Raycaster();
+      // Get scene from the home model group (for raycasting)
       const homeModel = this.sceneManager.getHomeModel();
       const sceneObjects: THREE.Object3D[] = [];
       if (homeModel) {
         sceneObjects.push(homeModel.getGroup());
       }
+      // Add furniture to scene objects for raycasting
       this.sceneManager.getAllFurniture().forEach(f => sceneObjects.push(f.getGroup()));
       
+      // Update head tracking alignment position using AR hit testing
+      // Frame is passed as parameter to updateFrame
       const hitPoint = this.navigationController.updateHeadTrackingAlignment(
         camera,
         session,
         raycaster,
         { children: sceneObjects } as THREE.Scene,
-        frame
+        frame // XR frame for AR hit testing (passed from useFrame)
       );
+
+      // Check for button press to confirm alignment point (only if alignment is ready)
       if (this.alignmentReady && session.inputSources) {
         session.inputSources.forEach((source: any, index: number) => {
           const gamepad = source.gamepad;
           if (!gamepad || !gamepad.buttons) return;
 
+          // Use trigger button (index 0) to confirm alignment
           const triggerButton = gamepad.buttons[0];
           const wasPressed = this.prevTriggerState.get(index) || false;
           const isPressed = triggerButton?.pressed || false;
           
           if (isPressed && !wasPressed) {
             const alignmentState = this.navigationController?.getAlignmentState();
+            console.log('Trigger pressed during alignment:', { alignmentState, hasHitPoint: !!hitPoint, hitPoint, alignmentReady: this.alignmentReady });
+            
             if (!hitPoint) {
               console.warn('Trigger pressed but no hitPoint available - using last known hit point or default depth');
+              // Use a fallback: try to get hit point from navigation controller or use default depth
               const cameraPosition = new THREE.Vector3();
               camera.getWorldPosition(cameraPosition);
               const cameraDirection = new THREE.Vector3();
               camera.getWorldDirection(cameraDirection);
               const fallbackHitPoint = cameraPosition.clone().addScaledVector(cameraDirection, 3.0);
+              console.log('Using fallback hit point:', fallbackHitPoint);
               
+              // Handle all corner alignment states with fallback
               if (alignmentState === 'aligningSecondCorner' && this.navigationController) {
+                console.log('Calling confirmSecondCornerAlignment with fallback hit point');
                 this.navigationController.confirmSecondCornerAlignment(fallbackHitPoint);
               } else if (alignmentState === 'aligningThirdCorner' && this.navigationController) {
+                console.log('Calling confirmThirdCornerAlignment with fallback hit point');
                 this.navigationController.confirmThirdCornerAlignment(fallbackHitPoint);
               } else if (alignmentState === 'aligningFourthCorner' && this.navigationController) {
+                console.log('Calling confirmFourthCornerAlignment with fallback hit point');
                 this.navigationController.confirmFourthCornerAlignment(fallbackHitPoint);
               }
               return;
@@ -1557,8 +1659,10 @@ private handleFurnitureDeselect(id: string): void {
             } else if (alignmentState === 'aligningSecondCorner' && this.navigationController) {
               this.navigationController.confirmSecondCornerAlignment(hitPoint);
             } else if (alignmentState === 'aligningThirdCorner' && this.navigationController) {
+              console.log('Trigger pressed for third corner alignment, calling confirmThirdCornerAlignment with hitPoint:', hitPoint);
               this.navigationController.confirmThirdCornerAlignment(hitPoint);
             } else if (alignmentState === 'aligningFourthCorner' && this.navigationController) {
+              console.log('Trigger pressed for fourth corner alignment, calling confirmFourthCornerAlignment with hitPoint:', hitPoint);
               this.navigationController.confirmFourthCornerAlignment(hitPoint);
             } else {
               console.warn('Trigger pressed but alignment state is:', alignmentState);
@@ -1676,6 +1780,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     if (!xr.session || !logicRef.current) return;
     logicRef.current.setupXRRig(scene, camera);
     
+    // Handle AR scene visibility when AR session is active
     const sessionMode = (xr.session as any)?.mode;
     const isInAlignmentMode = state.showHeadTrackingAlignment;
     if (sessionMode === 'immersive-ar' && !state.loading && !isInAlignmentMode) {
@@ -1688,7 +1793,8 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
         }
       }
     }
-  }, [xr.session, scene, camera]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [xr.session, scene, camera]); // Only depend on stable values to avoid hook order issues
  
   useEffect(() => {
     if (!xr.session || !logicRef.current || !arModeRequested) return;
@@ -1726,28 +1832,47 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     const session = xr.session;
     if (!session) return;
     
+    // Get XR frame from the session if available
+    // The frame is available during XR rendering
     const xrFrame = (session as any).requestAnimationFrame ? 
       (xrStore.getState() as any).frame : undefined;
     
+    // Pass XR frame for AR hit testing
     logicRef.current.updateFrame(session, camera, delta, xrFrame);
   });
 
+  // Get the WebGL renderer to set clear color for AR transparency
+  // Must be called before any early returns to maintain hooks order
   const { gl } = useThree();
   
+  // Determine if we're in AR mode (alignment, transparency toggle, or AR session)
   const isARAlignmentMode = state.showHeadTrackingAlignment;
   const xrSession = xr.session;
   const isARSession = xrSession && (xrSession as any).mode === 'immersive-ar';
+  // In alignment mode, show AR if session exists OR if we're trying to activate it
+  // This allows the UI to prepare for AR even if session is still initializing
   const isARMode = isARAlignmentMode ? (isARSession || state.homeTransparent) : (state.homeTransparent || isARSession);
   
+  // Set renderer clear color to transparent in AR mode
   useEffect(() => {
     if (isARMode) {
+      // Set clear color to transparent (black with 0 alpha) for AR passthrough
       gl.setClearColor(0x000000, 0);
+      // Ensure the renderer uses alpha and doesn't premultiply
       gl.domElement.style.backgroundColor = 'transparent';
+      // Disable auto-clear or set to clear with transparent
       gl.autoClear = true;
       gl.autoClearColor = true;
       gl.autoClearDepth = true;
       gl.autoClearStencil = true;
+      console.log('AR mode: Renderer clear color set to transparent', {
+        isARAlignmentMode,
+        isARSession,
+        homeTransparent: state.homeTransparent,
+        sessionMode: xrSession ? (xrSession as any).mode : 'none'
+      });
     } else {
+      // Set clear color back to gray for VR mode
       gl.setClearColor(0x808080, 1);
       gl.domElement.style.backgroundColor = '#808080';
     }
@@ -1926,6 +2051,25 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           show={state.showAlignmentConfirm} 
           onConfirm={() => logic.handleAlignmentConfirm()} 
           onCancel={() => logic.handleAlignmentCancel()} 
+        />
+      </HeadLockedUI>
+
+      {/* Alignment Instruction Panel */}
+      <HeadLockedUI distance={1.8} verticalOffset={0.3} enabled={state.showCornerSelection || state.showHeadTrackingAlignment}>
+        <AlignmentInstructionPanel
+          show={state.showCornerSelection || state.showHeadTrackingAlignment}
+          message={
+            state.showCornerSelection
+              ? "Select a corner from the 4 corners of the model"
+              : state.alignmentState === 'aligningFirstCorner'
+              ? "Align the corner lines to the real-world corner"
+              : "Align the corner lines to the diagonally opposite corner"
+          }
+          subMessage={
+            state.showCornerSelection
+              ? "Look at a corner and click to select"
+              : "Move your head to align the lines, then press trigger to confirm"
+          }
         />
       </HeadLockedUI>
 

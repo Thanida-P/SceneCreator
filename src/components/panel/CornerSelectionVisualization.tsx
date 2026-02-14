@@ -25,6 +25,7 @@ export function CornerSelectionVisualization({
   const camera = React.useRef<THREE.Camera | null>(null);
 
   React.useEffect(() => {
+    // Initialize corner refs
     cornerRefs.current = corners.map(() => null);
   }, [corners.length]);
 
@@ -32,6 +33,7 @@ export function CornerSelectionVisualization({
     if (!visible || !camera.current) return;
     camera.current = state.camera;
 
+    // Check for head tracking selection (using gaze/raycast)
     const cameraPosition = new THREE.Vector3();
     state.camera.getWorldPosition(cameraPosition);
     
@@ -40,12 +42,15 @@ export function CornerSelectionVisualization({
 
     raycaster.current.set(cameraPosition, cameraDirection);
 
+    // Check intersection with corner markers
     for (let i = 0; i < corners.length; i++) {
       const cornerMesh = cornerRefs.current[i];
       if (!cornerMesh) continue;
 
       const intersects = raycaster.current.intersectObject(cornerMesh);
       if (intersects.length > 0) {
+        // User is looking at this corner - could trigger selection after a delay
+        // For now, we'll use a click/button press mechanism
       }
     }
   });

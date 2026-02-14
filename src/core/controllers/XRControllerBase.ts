@@ -102,7 +102,7 @@ export type AlignmentState =
 
 export interface Corner {
   position: THREE.Vector3;
-  index: number;
+  index: number; // 0-3 for the four corners
 }
 
 export interface AlignmentData {
@@ -124,6 +124,8 @@ export class NavigationController extends XRControllerBase {
   private onNavigationModeChange?: (isActive: boolean) => void;
   private homeModelGroup: THREE.Group | null = null;
   private alignmentMode: boolean = false;
+  
+  // Automatic alignment system
   private alignmentState: AlignmentState = 'idle';
   private alignmentData: AlignmentData = {
     selectedCorner: null,
@@ -215,13 +217,13 @@ export class NavigationController extends XRControllerBase {
   selectCorner(cornerIndex: number): void {
     if (this.alignmentState !== 'selectingCorner' || !this.boundingBox || !this.homeModelGroup) return;
     
-    const corners = this.getModelCorners();
-    const cornersLocal = this.getModelCornersLocal();
+    const corners = this.getModelCorners(); // World space for selection display
+    const cornersLocal = this.getModelCornersLocal(); // Local space for calculations
     if (cornerIndex < 0 || cornerIndex >= corners.length) return;
     
-    // Store corner in model local space
-    this.alignmentData.selectedCorner = corners[cornerIndex]; 
-    this.alignmentData.firstCornerModelPos = cornersLocal[cornerIndex].position.clone();
+    // Store corner in model local space (original, untransformed position)
+    this.alignmentData.selectedCorner = corners[cornerIndex]; // Store world space corner for reference
+    this.alignmentData.firstCornerModelPos = cornersLocal[cornerIndex].position.clone(); // Store local space position
     this.alignmentState = 'aligningFirstCorner';
     this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
   }
@@ -244,12 +246,21 @@ export class NavigationController extends XRControllerBase {
       return;
     }
     
+    console.log('confirmSecondCornerAlignment: Starting second corner confirmation');
+    
     const cornersLocal = this.getModelCornersLocal();
+    // Get the next corner clockwise from the first selected corner
     const secondCornerIndex = (this.alignmentData.selectedCorner.index + 1) % 4;
     
+    // Store world position (where user aligned in real world)
     this.alignmentData.secondCornerWorldPos = worldPosition.clone();
+    
+    // Store second corner in model local space (original, untransformed position)
     this.alignmentData.secondCornerModelPos = cornersLocal[secondCornerIndex].position.clone();
     
+    console.log('confirmSecondCornerAlignment: Moving to third corner alignment');
+    
+    // Move to third corner alignment (next clockwise)
     this.alignmentState = 'aligningThirdCorner';
     this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
   }
@@ -264,13 +275,21 @@ export class NavigationController extends XRControllerBase {
       return;
     }
     
+    console.log('confirmThirdCornerAlignment: Starting third corner confirmation');
+    
     const cornersLocal = this.getModelCornersLocal();
+    // Get the third corner clockwise from the first selected corner
     const thirdCornerIndex = (this.alignmentData.selectedCorner.index + 2) % 4;
     
+    // Store world position (where user aligned in real world)
     this.alignmentData.thirdCornerWorldPos = worldPosition.clone();
     
+    // Store third corner in model local space (original, untransformed position)
     this.alignmentData.thirdCornerModelPos = cornersLocal[thirdCornerIndex].position.clone();
     
+    console.log('confirmThirdCornerAlignment: Moving to fourth corner alignment');
+    
+    // Move to fourth corner alignment (next clockwise)
     this.alignmentState = 'aligningFourthCorner';
     this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
   }
@@ -285,27 +304,40 @@ export class NavigationController extends XRControllerBase {
       return;
     }
     
+    console.log('confirmFourthCornerAlignment: Starting fourth corner confirmation');
+    
     const cornersLocal = this.getModelCornersLocal();
+    // Get the fourth corner clockwise from the first selected corner
     const fourthCornerIndex = (this.alignmentData.selectedCorner.index + 3) % 4;
     
+    // Store world position (where user aligned in real world)
     this.alignmentData.fourthCornerWorldPos = worldPosition.clone();
     
+    // Store fourth corner in model local space (original, untransformed position)
     this.alignmentData.fourthCornerModelPos = cornersLocal[fourthCornerIndex].position.clone();
     
+    console.log('confirmFourthCornerAlignment: Calculating transform with all four corners');
+    
+    // Calculate transformation using all four corners for maximum accuracy
     const transform = this.calculateTransform();
     if (transform && this.homeModelGroup) {
+      console.log('confirmFourthCornerAlignment: Transform calculated, applying to model', transform);
       this.homeModelGroup.position.copy(transform.position);
       this.homeModelGroup.rotation.copy(transform.rotation);
+      // Update matrix to ensure transformation is applied
       this.homeModelGroup.updateMatrix();
       this.homeModelGroup.updateMatrixWorld(true);
+      // Update bounding box after transformation
       this.updateBoundingBox();
       this.onAlignmentComplete?.(transform);
     } else {
       console.error('confirmFourthCornerAlignment: Failed to calculate transform', { transform, hasHomeModelGroup: !!this.homeModelGroup });
     }
     
+    console.log('confirmFourthCornerAlignment: Setting state to completed');
     this.alignmentState = 'completed';
     this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
+    console.log('confirmFourthCornerAlignment: State change callback called');
   }
 
   resetAlignment(): void {
@@ -321,6 +353,7 @@ export class NavigationController extends XRControllerBase {
       thirdCornerModelPos: null,
       fourthCornerModelPos: null,
     };
+    // Cleanup hit test source
     this.cleanupHitTest();
   }
 
@@ -329,6 +362,9 @@ export class NavigationController extends XRControllerBase {
     
     const box = this.boundingBox;
     const maxY = box.max.y;
+    
+    // Get the four top corners (highest Y value) in local model space
+    // These are relative to the modelGroup's local coordinate system
     const corners: Corner[] = [
       { position: new THREE.Vector3(box.min.x, maxY, box.min.z), index: 0 },
       { position: new THREE.Vector3(box.max.x, maxY, box.min.z), index: 1 },
@@ -336,6 +372,7 @@ export class NavigationController extends XRControllerBase {
       { position: new THREE.Vector3(box.min.x, maxY, box.max.z), index: 3 },
     ];
     
+    // Transform to world space for display/selection purposes
     return corners.map(corner => ({
       position: corner.position.clone().applyMatrix4(this.homeModelGroup!.matrixWorld),
       index: corner.index,
@@ -349,6 +386,8 @@ export class NavigationController extends XRControllerBase {
     const box = this.boundingBox;
     const maxY = box.max.y;
     
+    // Get the four top corners (highest Y value) in local model space
+    // These are in the model's local coordinate system (before any transformations)
     return [
       { position: new THREE.Vector3(box.min.x, maxY, box.min.z), index: 0 },
       { position: new THREE.Vector3(box.max.x, maxY, box.min.z), index: 1 },
@@ -366,11 +405,15 @@ export class NavigationController extends XRControllerBase {
       return null;
     }
     
+    // Get initial rotation and position to preserve X and Z components (prevent tilting)
     const initialRotation = this.homeModelGroup.rotation.clone();
     const initialPosition = this.homeModelGroup.position.clone();
     
+    // Get model floor level (minY) for floor alignment
     const modelFloorY = this.boundingBox.min.y;
     
+    // Use a more accurate rotation calculation method
+    // Calculate the centroid of model corners and world corners
     const modelCentroid = new THREE.Vector3()
       .add(this.alignmentData.firstCornerModelPos)
       .add(this.alignmentData.secondCornerModelPos);
@@ -393,15 +436,19 @@ export class NavigationController extends XRControllerBase {
     modelCentroid.divideScalar(cornerCount);
     worldCentroid.divideScalar(cornerCount);
     
+    // Calculate vectors from centroid to corners (centered vectors)
     const modelVec1 = new THREE.Vector3()
       .subVectors(this.alignmentData.secondCornerModelPos, this.alignmentData.firstCornerModelPos);
     const worldVec1 = new THREE.Vector3()
       .subVectors(this.alignmentData.secondCornerWorldPos, this.alignmentData.firstCornerWorldPos);
     
+    // Project onto horizontal plane (XZ plane) to only calculate Y-axis rotation
     const modelVec1Horizontal = new THREE.Vector3(modelVec1.x, 0, modelVec1.z);
     const worldVec1Horizontal = new THREE.Vector3(worldVec1.x, 0, worldVec1.z);
     
+    // Check if vectors are valid
     if (modelVec1Horizontal.length() < 0.001 || worldVec1Horizontal.length() < 0.001) {
+      // Vectors are vertical, no horizontal rotation needed
       const cornerHeightOffset = this.alignmentData.firstCornerModelPos.y - modelFloorY;
       const targetFloorY = this.alignmentData.firstCornerWorldPos.y - cornerHeightOffset;
       
@@ -417,14 +464,17 @@ export class NavigationController extends XRControllerBase {
       };
     }
     
+    // Normalize
     modelVec1Horizontal.normalize();
     worldVec1Horizontal.normalize();
     
+    // Calculate rotation angle from the primary edge vector (first -> second)
     const dot1 = Math.max(-1, Math.min(1, modelVec1Horizontal.dot(worldVec1Horizontal)));
     const angle1 = Math.acos(dot1);
     const cross1 = new THREE.Vector3().crossVectors(modelVec1Horizontal, worldVec1Horizontal);
     let rotationY = cross1.y > 0 ? angle1 : -angle1;
     
+    // If we have all four corners, use the perpendicular edge (first->fourth) to refine
     if (this.alignmentData.fourthCornerWorldPos && this.alignmentData.fourthCornerModelPos) {
       const modelVec4 = new THREE.Vector3()
         .subVectors(this.alignmentData.fourthCornerModelPos, this.alignmentData.firstCornerModelPos);
@@ -434,13 +484,16 @@ export class NavigationController extends XRControllerBase {
       const modelVec4Horizontal = new THREE.Vector3(modelVec4.x, 0, modelVec4.z).normalize();
       const worldVec4Horizontal = new THREE.Vector3(worldVec4.x, 0, worldVec4.z).normalize();
       
+      // Calculate rotation from the perpendicular edge (first->fourth)
       const dot4 = Math.max(-1, Math.min(1, modelVec4Horizontal.dot(worldVec4Horizontal)));
       const angle4 = Math.acos(dot4);
       const cross4 = new THREE.Vector3().crossVectors(modelVec4Horizontal, worldVec4Horizontal);
       const rotationY4 = cross4.y > 0 ? angle4 : -angle4;
       
+      // Average both rotations for better accuracy
       rotationY = (rotationY * 0.55 + rotationY4 * 0.45);
     } else if (this.alignmentData.thirdCornerWorldPos && this.alignmentData.thirdCornerModelPos) {
+      // Use third corner for refinement if fourth is not available
       const modelVec3 = new THREE.Vector3()
         .subVectors(this.alignmentData.thirdCornerModelPos, this.alignmentData.firstCornerModelPos);
       const worldVec3 = new THREE.Vector3()
@@ -449,29 +502,46 @@ export class NavigationController extends XRControllerBase {
       const modelVec3Horizontal = new THREE.Vector3(modelVec3.x, 0, modelVec3.z).normalize();
       const worldVec3Horizontal = new THREE.Vector3(worldVec3.x, 0, worldVec3.z).normalize();
       
+      // Calculate rotation from third corner vector
       const dot3 = Math.max(-1, Math.min(1, modelVec3Horizontal.dot(worldVec3Horizontal)));
       const angle3 = Math.acos(dot3);
       const cross3 = new THREE.Vector3().crossVectors(modelVec3Horizontal, worldVec3Horizontal);
       const rotationY3 = cross3.y > 0 ? angle3 : -angle3;
       
+      // Average the rotation from both vectors
       rotationY = (rotationY + rotationY3) / 2;
     }
     
     
+    // Create rotation only around Y-axis, preserving X and Z from initial rotation
     const rotation = new THREE.Euler(
-      initialRotation.x,
-      initialRotation.y + rotationY,
-      initialRotation.z
+      initialRotation.x,  // Preserve X rotation (no tilting)
+      initialRotation.y + rotationY,  // Apply Y rotation
+      initialRotation.z   // Preserve Z rotation (no tilting)
     );
     
+    // Create quaternion for rotation calculation
     const quaternion = new THREE.Quaternion().setFromEuler(rotation);
     
+    // Rotate the first corner model position (in model local space)
+    // This gives us where the corner will be in local space after rotation
     const rotatedFirstCornerLocal = this.alignmentData.firstCornerModelPos.clone()
       .applyQuaternion(quaternion);
     
+    // Calculate the floor level offset
+    // The corner is at firstCornerModelPos.y (in local space), and floor is at modelFloorY
+    // We want to align the model floor to the real-world floor level
+    // The user aligned to the top corner, so we calculate where the floor should be
     const cornerHeightOffset = this.alignmentData.firstCornerModelPos.y - modelFloorY;
     const targetFloorY = this.alignmentData.firstCornerWorldPos.y - cornerHeightOffset;
     
+    // Calculate position: we want the rotated corner (in local space) to be at firstCornerWorldPos (in world space)
+    // When model is at position P with rotation R, a local point L becomes world point: P + R(L)
+    // We want: firstCornerWorldPos = P + R(rotatedFirstCornerLocal)
+    // Therefore: P = firstCornerWorldPos - R(rotatedFirstCornerLocal)
+    // But R(rotatedFirstCornerLocal) is just rotatedFirstCornerLocal (already rotated)
+    // However, we need to account for the rotation being applied by Three.js
+    // The position should place the rotated local corner at the world position
     const position = new THREE.Vector3(
       this.alignmentData.firstCornerWorldPos.x - rotatedFirstCornerLocal.x,
       targetFloorY - modelFloorY, // Align floor level (model floor at target floor Y)
@@ -499,8 +569,10 @@ export class NavigationController extends XRControllerBase {
     if (!session || this.hitTestSource) return;
     
     try {
+      // Request hit test source for viewer space (camera-based)
       this.viewerSpace = await (session as any).requestReferenceSpace('viewer');
       this.hitTestSource = await (session as any).requestHitTestSource({ space: this.viewerSpace });
+      console.log('AR hit test source initialized');
     } catch (err) {
       console.warn('Failed to initialize AR hit test:', err);
     }
@@ -531,28 +603,34 @@ export class NavigationController extends XRControllerBase {
       return null;
     }
 
+    // Get camera position and direction
     const cameraPosition = new THREE.Vector3();
     camera.getWorldPosition(cameraPosition);
     
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
 
+    // Use AR hit testing if available (for AR mode)
     if (session && frame && (session as any).mode === 'immersive-ar') {
       try {
+        // Initialize hit test source if not already done
         if (!this.hitTestSource && session.requestHitTestSource) {
           this.initializeHitTest(session).catch(err => {
             console.warn('Failed to initialize hit test:', err);
           });
         }
 
+        // Perform hit test if we have a hit test source and viewer space
         if (this.hitTestSource && this.viewerSpace && frame) {
           const hitTestResults = frame.getHitTestResults(this.hitTestSource);
           
           if (hitTestResults && hitTestResults.length > 0) {
+            // Get the first hit result
             const hit = hitTestResults[0];
             const pose = hit.getPose(this.viewerSpace);
             
             if (pose) {
+              // Convert XR pose to Three.js Vector3
               const xrMatrix = new THREE.Matrix4().fromArray(pose.transform.matrix);
               const hitPoint = new THREE.Vector3().setFromMatrixPosition(xrMatrix);
               this.lastHitPoint = hitPoint;
@@ -560,7 +638,8 @@ export class NavigationController extends XRControllerBase {
             }
           }
         }
-
+        
+        // Return last hit point if available, otherwise use fallback
         if (this.lastHitPoint) {
           return this.lastHitPoint.clone();
         }
@@ -569,7 +648,9 @@ export class NavigationController extends XRControllerBase {
       }
     }
 
-    const defaultDepth = 3.0;
+    // Fallback: Use default depth if hit test not available
+    // This should only happen if AR hit testing is not supported
+    const defaultDepth = 3.0; // Default depth in meters
     const fallbackPoint = cameraPosition.clone().addScaledVector(cameraDirection, defaultDepth);
     return fallbackPoint;
   }
@@ -610,6 +691,7 @@ export class NavigationController extends XRControllerBase {
   ): void {
     if (!this.config.enabled || !this.rig || !session || !session.inputSources) return;
 
+    // During automatic alignment, disable controller-based navigation
     if (this.alignmentState !== 'idle' && this.alignmentState !== 'completed') {
       return;
     }
@@ -650,8 +732,8 @@ export class NavigationController extends XRControllerBase {
 
     if (!isGripPressed) return;
 
-    // Legacy manual alignment mode (only when not in automatic alignment)
     if (this.alignmentMode && this.homeModelGroup && this.alignmentState === 'idle') {
+      // Legacy manual alignment mode (only when not in automatic alignment)
       if (Math.abs(rotateInput) > 0) {
         const rotationDelta = -rotateInput * this.config.rotateSpeed * delta;
         this.homeModelGroup.rotateY(rotationDelta);
@@ -672,8 +754,8 @@ export class NavigationController extends XRControllerBase {
 
         this.homeModelGroup.position.add(movement);
       }
-      // Normal navigation mode
     } else if (this.rig) {
+      // Normal navigation mode
       if (Math.abs(rotateInput) > 0) {
         const rotationDelta = rotateInput * this.config.rotateSpeed * delta;
         this.rig.rotateY(rotationDelta);

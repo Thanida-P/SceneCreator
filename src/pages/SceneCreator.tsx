@@ -38,7 +38,7 @@ export function SceneCreator() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [arModeRequested, setArModeRequested] = useState(false);
-  const [canvasKey, setCanvasKey] = useState(0);
+  const [canvasKey, setCanvasKey] = useState(0); // Key to force Canvas remount if needed
 
   useEffect(() => {
     if (!homeId) {
@@ -170,28 +170,35 @@ export function SceneCreator() {
           depth: true
         }}
         onCreated={({ gl }) => {
+          // Handle WebGL context loss
           const handleContextLost = (event: Event) => {
             event.preventDefault();
             console.warn('WebGL context lost, attempting to restore...');
             setError('WebGL context lost. Please refresh the page.');
             
+            // Try to restore context after a delay
             setTimeout(() => {
               try {
+                // Check if context is still lost
                 const canvas = gl.domElement;
                 const context = canvas.getContext('webgl2') || canvas.getContext('webgl');
                 if (!context || context.isContextLost()) {
+                  // Force page reload if context cannot be restored
                   console.warn('Context cannot be restored, reloading page...');
                   window.location.reload();
                 }
               } catch (err) {
                 console.error('Failed to restore context:', err);
+                // Reload page as last resort
                 window.location.reload();
               }
             }, 2000);
           };
 
           const handleContextRestored = () => {
+            console.log('WebGL context restored');
             setError(null);
+            // Reset canvas key to force remount if needed
             setCanvasKey(prev => prev + 1);
           };
 
@@ -217,6 +224,7 @@ export function SceneCreator() {
             mode: 'immersive-ar',
             requiredFeatures: ['local-floor'],
             optionalFeatures: ['bounded-floor', 'hand-tracking', 'layers']
+            // Note: 'dom-overlay' is not supported in AR mode, so we don't include it
           } : {
             optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
           }}
@@ -264,17 +272,22 @@ export function SceneCreator() {
             }}
             onClick={async () => {
               try {
+                // Check if AR is supported first
                 if (navigator.xr && (navigator.xr as any).isSessionSupported) {
                   const isARSupported = await (navigator.xr as any).isSessionSupported('immersive-ar');
                   
                   if (isARSupported) {
+                    // End current session if exists
                     const currentSession = xrStore.getState().session;
                     if (currentSession) {
                       await currentSession.end();
+                      // Wait for session to fully end
                       await new Promise(resolve => setTimeout(resolve, 300));
                     }
                     
+                    // Set AR mode requested flag - ARSessionHandler component will handle the session creation
                     setArModeRequested(true);
+                    console.log('AR mode requested - session will be initialized by ARSessionHandler');
                   } else {
                     console.warn('AR not supported, falling back to VR');
                     setArModeRequested(false);
@@ -287,6 +300,7 @@ export function SceneCreator() {
               } catch (err) {
                 console.error("Failed to enter AR:", err);
                 setArModeRequested(false);
+                // Fallback to VR
                 try {
                   await xrStore.enterVR();
                 } catch (vrErr) {
