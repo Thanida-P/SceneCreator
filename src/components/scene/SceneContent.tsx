@@ -569,13 +569,14 @@ class SceneContentLogic {
               setTimeout(() => {
                 this.cornerSelectionReady = true;
               }, 500);
-            } else if (state === 'aligningFloorLevel') {
+            } else if (state === 'aligningFirstCorner') {
               this.prevTriggerState.clear();
               this.alignmentReady = false;
               
               if (homeModel) {
                 homeModel.setVisible(false);
               }
+              
 
               this.updateState({
                 showCornerSelection: false,
@@ -605,16 +606,6 @@ class SceneContentLogic {
                   this.alignmentReady = true;
                 }, 1000);
               }
-            } else if (state === 'aligningFirstCorner') {
-              this.prevTriggerState.clear();
-              this.alignmentReady = false;
-              setTimeout(() => {
-                this.alignmentReady = true;
-              }, 300);
-              this.updateState({ 
-                showHeadTrackingAlignment: true,
-                alignmentARModeRequested: true,
-              });
             } else if (state === 'aligningSecondCorner') {
               this.prevTriggerState.clear();
               this.alignmentReady = false;
@@ -1459,7 +1450,7 @@ private handleFurnitureDeselect(id: string): void {
     return this.sceneManager.getAllFurniture().map(item => item.getId().split('-')[0]);
   }
 
-  updateFrame(session: any, camera: THREE.Camera, delta: number, frame?: XRFrame, gl?: THREE.WebGLRenderer): void {
+  updateFrame(session: any, camera: THREE.Camera, delta: number, frame?: XRFrame): void {
     if (!session) return;
 
     // Handle corner selection with head tracking
@@ -1524,15 +1515,12 @@ private handleFurnitureDeselect(id: string): void {
       }
       this.sceneManager.getAllFurniture().forEach(f => sceneObjects.push(f.getGroup()));
       
-      const xrReferenceSpace = gl?.xr?.getReferenceSpace() || null;
-      
       const hitPoint = this.navigationController.updateHeadTrackingAlignment(
         camera,
         session,
         raycaster,
         { children: sceneObjects } as THREE.Scene,
-        frame,
-        xrReferenceSpace
+        frame
       );
       if (this.alignmentReady && session.inputSources) {
         session.inputSources.forEach((source: any, index: number) => {
@@ -1553,9 +1541,7 @@ private handleFurnitureDeselect(id: string): void {
               camera.getWorldDirection(cameraDirection);
               const fallbackHitPoint = cameraPosition.clone().addScaledVector(cameraDirection, 3.0);
               
-              if (alignmentState === 'aligningFloorLevel' && this.navigationController) {
-                this.navigationController.confirmFloorLevelAlignment(fallbackHitPoint);
-              } else if (alignmentState === 'aligningSecondCorner' && this.navigationController) {
+              if (alignmentState === 'aligningSecondCorner' && this.navigationController) {
                 this.navigationController.confirmSecondCornerAlignment(fallbackHitPoint);
               } else if (alignmentState === 'aligningThirdCorner' && this.navigationController) {
                 this.navigationController.confirmThirdCornerAlignment(fallbackHitPoint);
@@ -1565,10 +1551,7 @@ private handleFurnitureDeselect(id: string): void {
               return;
             }
             
-            if (alignmentState === 'aligningFloorLevel' && this.navigationController) {
-              this.navigationController.confirmFloorLevelAlignment(hitPoint);
-              this.updateState({ showHeadTrackingAlignment: true });
-            } else if (alignmentState === 'aligningFirstCorner' && this.navigationController) {
+            if (alignmentState === 'aligningFirstCorner' && this.navigationController) {
               this.navigationController.confirmFirstCornerAlignment(hitPoint);
               this.updateState({ showHeadTrackingAlignment: true });
             } else if (alignmentState === 'aligningSecondCorner' && this.navigationController) {
@@ -1735,7 +1718,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     logicRef.current.loadDeployedItems();
   }, [logicRef.current?.modelUrlCache.size]);
 
-  useFrame((state, delta, xrFrame) => {
+  useFrame((_state, delta) => {
     if (!logicRef.current) return;
     
     logicRef.current.sceneManager?.updateAnimations(delta);
@@ -1743,7 +1726,10 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     const session = xr.session;
     if (!session) return;
     
-    logicRef.current.updateFrame(session, camera, delta, xrFrame as XRFrame | undefined, state.gl);
+    const xrFrame = (session as any).requestAnimationFrame ? 
+      (xrStore.getState() as any).frame : undefined;
+    
+    logicRef.current.updateFrame(session, camera, delta, xrFrame);
   });
 
   const { gl } = useThree();
@@ -1800,9 +1786,12 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
 
   return (
     <>
-      {/* AR Session Handler */}
+      {/* AR Session Handler - handles AR session initialization inside Canvas where renderer is available */}
+      {/* AR Session Handler - handles AR session initialization inside Canvas where renderer is available */}
+      {/* Use alignmentARModeRequested for alignment flow, arModeRequested for manual AR toggle */}
       <ARSessionHandler arModeRequested={arModeRequested || state.alignmentARModeRequested} />
-
+      
+      {/* Background - transparent in AR mode to show real world */}
       {!isARMode && <color args={["#808080"]} attach="background" />}
       <PerspectiveCamera makeDefault position={[0, 1.6, 2]} fov={75} />
       <ambientLight intensity={isARMode ? 0.2 : 0.5} />
@@ -1904,15 +1893,13 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
               targetDepth={3.0}
               onConfirm={() => logic.handleConfirmAlignmentPoint()}
           instruction={
-            state.alignmentState === 'aligningFloorLevel'
-              ? "Point at the FLOOR level of the chosen corner. Press trigger to confirm."
-              : state.alignmentState === 'aligningFirstCorner'
-              ? "Now point at the TOP (ceiling) of the same corner. Press trigger to confirm."
+            state.alignmentState === 'aligningFirstCorner'
+              ? "Align the corner lines to the real-world corner. Press trigger to confirm."
               : state.alignmentState === 'aligningSecondCorner'
-              ? "Point at the top of the next corner (clockwise). Press trigger to confirm."
+              ? "Align the corner lines to the next corner (clockwise). Press trigger to confirm."
               : state.alignmentState === 'aligningThirdCorner'
-              ? "Point at the top of the next corner (clockwise). Press trigger to confirm."
-              : "Point at the top of the final corner (clockwise). Press trigger to confirm."
+              ? "Align the corner lines to the next corner (clockwise). Press trigger to confirm."
+              : "Align the corner lines to the final corner (clockwise). Press trigger to confirm."
           }
             />
           )}
@@ -2022,7 +2009,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       </HeadLockedUI>
 
       <HeadLockedUI distance={1.4} verticalOffset={0} enabled={state.showSidebar}>
-        <group position={[-0.8, 0, 0]}>
+        <group position={[-0.8, 0, 0]}> {/* Offset to the left within head-locked space */}
           <VRSidebar
             show={state.showSidebar}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
