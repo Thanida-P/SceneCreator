@@ -48,6 +48,13 @@ const baseSidebarItems: SidebarItemData[] = [
     color: "#F59E0B",
     description: "Personalize scene",
   },
+  {
+    id: "weather",
+    icon: "☀",
+    label: "Weather",
+    color: "#0EA5E9",
+    description: "Add weather widget",
+  },
 ];
 
 const SIDEBAR_WIDTH = 0.25;

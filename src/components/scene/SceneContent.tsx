@@ -26,7 +26,7 @@ import { VRAlignmentPanel, VRAlignmentConfirmPanel } from "../panel/VRAlignmentP
 import { CornerSelectionVisualization } from "../panel/CornerSelectionVisualization";
 import { AlignmentLineVisualization } from "../panel/AlignmentLineVisualization";
 import { ARSessionHandler } from "./ARSessionHandler";
-
+import { WeatherWidget } from "../../core/objects/WeatherWidget";
 
 
 const DIGITAL_HOME_PLATFORM_BASE_URL = import.meta.env.VITE_DIGITAL_HOME_PLATFORM_URL;
@@ -952,8 +952,51 @@ class SceneContentLogic {
         showScalePanel: false,
       });
       break;
+    case "weather":
+      this.addWeatherWidget();
+      break;
   }
 }
+  addWeatherWidget(): void {
+    if (!this.sceneManager) return;
+ 
+    // Check if a weather widget already exists
+    const existing = this.sceneManager
+      .getAllFurniture()
+      .find((f) => f.getMetadata().type === 'weather_widget');
+    if (existing) {
+      // Remove it (toggle behavior)
+      this.sceneManager.removeFurniture(existing.getId());
+      if (this.state.selectedItemId === existing.getId()) {
+        this.updateState({ selectedItemId: null, showSlider: false });
+      }
+      this.showNotificationMessage('Weather widget removed', 'info');
+      return;
+    }
+ 
+    const widgetId = `weather-${Date.now()}`;
+    // Spawn 2m in front of the camera is handled externally; we use a fixed position here
+    const spawnPos: [number, number, number] = [0, 1.5, 0];
+ 
+    const widget = new WeatherWidget(widgetId, {
+      position: spawnPos,
+      rotation: [0, 0, 0],
+      scale: 1.0,
+    });
+ 
+    this.sceneManager.addFurniture(widget).then(() => {
+      this.sceneManager!.selectFurniture(widgetId);
+      this.furnitureController?.setSelectedFurniture(widgetId);
+      this.updateState({
+        selectedItemId: widgetId,
+        showSlider: true,
+        showFurniture: false,
+        selectedItemPlacementMode: 'floor',
+      });
+      this.showNotificationMessage('Weather widget added!', 'success');
+    });
+  }
+ 
 
   async handleSaveScene(): Promise<void> {
     if (this.state.saving || !this.sceneManager) return;
