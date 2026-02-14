@@ -102,7 +102,7 @@ class SceneContentLogic {
   public pendingMove: [number, number, number] | null = null;
   public currentAABBPosition: [number, number, number] | null = null;
   public modelUrlCache: Map<number, string> = new Map();
-  private prevTriggerState: Map<number, boolean> = new Map();
+  private prevTriggerState: Map<string, boolean> = new Map();
   private xrStore: any = null;
   private isRequestingAR: boolean = false;
   private cornerSelectionReady: boolean = false;
@@ -569,8 +569,7 @@ class SceneContentLogic {
               setTimeout(() => {
                 this.cornerSelectionReady = true;
               }, 500);
-            } else if (state === 'aligningFloorLevel') {
-              this.prevTriggerState.clear();
+            } else if (state === 'aligningFirstCorner') {
               this.alignmentReady = false;
               
               if (homeModel) {
@@ -605,48 +604,34 @@ class SceneContentLogic {
                   this.alignmentReady = true;
                 }, 1000);
               }
-            } else if (state === 'aligningFirstCorner') {
-              this.prevTriggerState.clear();
-              this.alignmentReady = false;
-              setTimeout(() => {
-                this.alignmentReady = true;
-              }, 300);
-              this.updateState({ 
-                showHeadTrackingAlignment: true,
-                alignmentARModeRequested: true,
-              });
             } else if (state === 'aligningSecondCorner') {
-              this.prevTriggerState.clear();
               this.alignmentReady = false;
               setTimeout(() => {
                 this.alignmentReady = true;
-              }, 300);
+              }, 800);
               this.updateState({ 
                 showHeadTrackingAlignment: true,
                 alignmentARModeRequested: true,
               });
             } else if (state === 'aligningThirdCorner') {
-              this.prevTriggerState.clear();
               this.alignmentReady = false;
               setTimeout(() => {
                 this.alignmentReady = true;
-              }, 300);
+              }, 800);
               this.updateState({ 
                 showHeadTrackingAlignment: true,
                 alignmentARModeRequested: true,
               });
             } else if (state === 'aligningFourthCorner') {
-              this.prevTriggerState.clear();
               this.alignmentReady = false;
               setTimeout(() => {
                 this.alignmentReady = true;
-              }, 300);
+              }, 800);
               this.updateState({ 
                 showHeadTrackingAlignment: true,
                 alignmentARModeRequested: true,
               });
             } else if (state === 'completed') {
-              // this still does not fully work
               const switchToVR = async () => {
                 const currentSession = this.xrStore?.getState()?.session;
                 
@@ -660,6 +645,7 @@ class SceneContentLogic {
                 }
                 
                 try {
+                  // not yet working to switch back to VR mode after AR alignment
                   if (navigator.xr && (navigator.xr as any).isSessionSupported) {
                     const isVRSupported = await (navigator.xr as any).isSessionSupported('immersive-vr');
                     if (isVRSupported) {
@@ -1497,24 +1483,26 @@ private handleFurnitureDeselect(id: string): void {
         });
 
         if (this.cornerSelectionReady) {
-          session.inputSources.forEach((source: any, index: number) => {
+          session.inputSources.forEach((source: any) => {
             const gamepad = source.gamepad;
             if (!gamepad || !gamepad.buttons) return;
+            const handedness = source.handedness as string;
+            if (!handedness || handedness === 'none') return;
+            
             const triggerButton = gamepad.buttons[0];
-            const wasPressed = this.prevTriggerState.get(index) || false;
+            const wasPressed = this.prevTriggerState.get(handedness) || false;
             const isPressed = triggerButton?.pressed || false;
+            
+            this.prevTriggerState.set(handedness, isPressed);
             
             if (isPressed && !wasPressed && closestCornerIndex >= 0) {
               this.handleCornerSelect(closestCornerIndex);
             }
-            
-            this.prevTriggerState.set(index, isPressed);
           });
         }
       }
     }
 
-    // Handle head tracking alignment
     if (this.state.showHeadTrackingAlignment && this.navigationController && this.sceneManager) {
       const raycaster = new THREE.Raycaster();
       const homeModel = this.sceneManager.getHomeModel();
@@ -1534,56 +1522,55 @@ private handleFurnitureDeselect(id: string): void {
         frame,
         xrReferenceSpace
       );
-      if (this.alignmentReady && session.inputSources) {
-        session.inputSources.forEach((source: any, index: number) => {
+
+      let confirmedThisFrame = false;
+      if (session.inputSources) {
+        const sources = Array.from(session.inputSources as Iterable<any>);
+        for (const source of sources) {
+          if (confirmedThisFrame) break;
+          
           const gamepad = source.gamepad;
-          if (!gamepad || !gamepad.buttons) return;
+          if (!gamepad || !gamepad.buttons) continue;
+          const handedness = source.handedness as string;
+          if (!handedness || handedness === 'none') continue;
 
           const triggerButton = gamepad.buttons[0];
-          const wasPressed = this.prevTriggerState.get(index) || false;
+          const wasPressed = this.prevTriggerState.get(handedness) || false;
           const isPressed = triggerButton?.pressed || false;
+          
+          this.prevTriggerState.set(handedness, isPressed);
+          
+          if (!this.alignmentReady) continue;
           
           if (isPressed && !wasPressed) {
             const alignmentState = this.navigationController?.getAlignmentState();
-            if (!hitPoint) {
-              console.warn('Trigger pressed but no hitPoint available - using last known hit point or default depth');
+            
+            let confirmPoint = hitPoint;
+            if (!confirmPoint) {
+              console.warn('Trigger pressed but no hitPoint available - using fallback');
               const cameraPosition = new THREE.Vector3();
               camera.getWorldPosition(cameraPosition);
               const cameraDirection = new THREE.Vector3();
               camera.getWorldDirection(cameraDirection);
-              const fallbackHitPoint = cameraPosition.clone().addScaledVector(cameraDirection, 3.0);
-              
-              if (alignmentState === 'aligningFloorLevel' && this.navigationController) {
-                this.navigationController.confirmFloorLevelAlignment(fallbackHitPoint);
-              } else if (alignmentState === 'aligningSecondCorner' && this.navigationController) {
-                this.navigationController.confirmSecondCornerAlignment(fallbackHitPoint);
-              } else if (alignmentState === 'aligningThirdCorner' && this.navigationController) {
-                this.navigationController.confirmThirdCornerAlignment(fallbackHitPoint);
-              } else if (alignmentState === 'aligningFourthCorner' && this.navigationController) {
-                this.navigationController.confirmFourthCornerAlignment(fallbackHitPoint);
-              }
-              return;
+              confirmPoint = cameraPosition.clone().addScaledVector(cameraDirection, 3.0);
             }
             
-            if (alignmentState === 'aligningFloorLevel' && this.navigationController) {
-              this.navigationController.confirmFloorLevelAlignment(hitPoint);
-              this.updateState({ showHeadTrackingAlignment: true });
-            } else if (alignmentState === 'aligningFirstCorner' && this.navigationController) {
-              this.navigationController.confirmFirstCornerAlignment(hitPoint);
+            if (alignmentState === 'aligningFirstCorner' && this.navigationController) {
+              this.navigationController.confirmFirstCornerAlignment(confirmPoint);
+              confirmedThisFrame = true;
               this.updateState({ showHeadTrackingAlignment: true });
             } else if (alignmentState === 'aligningSecondCorner' && this.navigationController) {
-              this.navigationController.confirmSecondCornerAlignment(hitPoint);
+              this.navigationController.confirmSecondCornerAlignment(confirmPoint);
+              confirmedThisFrame = true;
             } else if (alignmentState === 'aligningThirdCorner' && this.navigationController) {
-              this.navigationController.confirmThirdCornerAlignment(hitPoint);
+              this.navigationController.confirmThirdCornerAlignment(confirmPoint);
+              confirmedThisFrame = true;
             } else if (alignmentState === 'aligningFourthCorner' && this.navigationController) {
-              this.navigationController.confirmFourthCornerAlignment(hitPoint);
-            } else {
-              console.warn('Trigger pressed but alignment state is:', alignmentState);
+              this.navigationController.confirmFourthCornerAlignment(confirmPoint);
+              confirmedThisFrame = true;
             }
           }
-          
-          this.prevTriggerState.set(index, isPressed);
-        });
+        }
       }
     }
 
@@ -1904,15 +1891,13 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
               targetDepth={3.0}
               onConfirm={() => logic.handleConfirmAlignmentPoint()}
           instruction={
-            state.alignmentState === 'aligningFloorLevel'
-              ? "Point at the FLOOR level of the chosen corner. Press trigger to confirm."
-              : state.alignmentState === 'aligningFirstCorner'
-              ? "Now point at the TOP (ceiling) of the same corner. Press trigger to confirm."
+            state.alignmentState === 'aligningFirstCorner'
+              ? "Corner 1/4: Point at the selected corner in the real world. Floor level is auto-detected. Press trigger to confirm."
               : state.alignmentState === 'aligningSecondCorner'
-              ? "Point at the top of the next corner (clockwise). Press trigger to confirm."
+              ? "Corner 2/4: Point at the next corner (clockwise) in the real world. Press trigger to confirm."
               : state.alignmentState === 'aligningThirdCorner'
-              ? "Point at the top of the next corner (clockwise). Press trigger to confirm."
-              : "Point at the top of the final corner (clockwise). Press trigger to confirm."
+              ? "Corner 3/4: Point at the third corner (clockwise) in the real world. Press trigger to confirm."
+              : "Corner 4/4: Point at the last corner (clockwise) in the real world. Press trigger to confirm."
           }
             />
           )}
