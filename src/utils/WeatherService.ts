@@ -47,28 +47,24 @@ interface GeoLocation {
 }
  
 async function getUserLocation(): Promise<GeoLocation> {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      // Default to Bangkok
-      resolve({ latitude: 13.7563, longitude: 100.5018, name: 'Bangkok' });
-      return;
+  // Use IP-based geolocation
+  try {
+    const res = await fetch('https://ipapi.co/json/');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.latitude && data.longitude) {
+        return {
+          latitude: data.latitude,
+          longitude: data.longitude,
+          name: data.city || 'Unknown',
+        };
+      }
     }
- 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          name: 'Current Location',
-        });
-      },
-      () => {
-        // Default to Bangkok on error
-        resolve({ latitude: 13.7563, longitude: 100.5018, name: 'Bangkok' });
-      },
-      { timeout: 5000 }
-    );
-  });
+  } catch (error) {
+    console.error("Failed to get user location:", error);
+  }
+  // Default fallback
+  return { latitude: 13.7563, longitude: 100.5018, name: 'Bangkok' };
 }
  
 export async function fetchWeatherData(): Promise<WeatherData> {
