@@ -23,11 +23,11 @@ function AxisArrow({ axis, color, position, rotation, onAxisDrag }: AxisArrowPro
   const meshRef = useRef<THREE.Mesh>(null);
 
   useEffect(() => {
-    console.log(`[AxisArrow-${axis}] Component mounted`);
+   
   }, [axis]);
 
   const handlePointerDown = (e: any) => {
-    console.log(`[AxisArrow-${axis}] ⬇️  onPointerDown - START DRAG`);
+   
     
     e.stopPropagation();
     setDragging(true);
@@ -35,7 +35,7 @@ function AxisArrow({ axis, color, position, rotation, onAxisDrag }: AxisArrowPro
   
     if (e.point) {
       dragStartRef.current = new THREE.Vector3(e.point.x, e.point.y, e.point.z);
-      console.log(`[AxisArrow-${axis}] Drag reference set:`, dragStartRef.current);
+     
     }
   };
 
@@ -64,7 +64,7 @@ function AxisArrow({ axis, color, position, rotation, onAxisDrag }: AxisArrowPro
     }
 
     if (Math.abs(delta) > 0.001) {
-      console.log(`[AxisArrow-${axis}] 🔄 onPointerMove - delta: ${delta.toFixed(4)}`);
+      
       dragStartRef.current = currentPoint;
       onAxisDrag(axis, delta);
     }
@@ -72,8 +72,6 @@ function AxisArrow({ axis, color, position, rotation, onAxisDrag }: AxisArrowPro
 
   const handlePointerUp = (e: any) => {
     if (!dragging) return;
-
-    console.log(`[AxisArrow-${axis}] ⬆️  onPointerUp - END DRAG`);
     
     e.stopPropagation();
     setDragging(false);
@@ -84,7 +82,7 @@ function AxisArrow({ axis, color, position, rotation, onAxisDrag }: AxisArrowPro
     if (!dragging) return;
 
     const handleGlobalPointerUp = (e: PointerEvent) => {
-      console.log(`[AxisArrow-${axis}] ⬆️ onPointerUp - END DRAG (global)`);
+      
       setDragging(false);
       dragStartRef.current = null;
     };
@@ -97,7 +95,7 @@ function AxisArrow({ axis, color, position, rotation, onAxisDrag }: AxisArrowPro
   }, [dragging, axis]);
 
   const handlePointerEnter = (e: any) => {
-    console.log(`[AxisArrow-${axis}] 👆 onPointerEnter - HOVER ON`);
+   
     e.stopPropagation();
     setHovered(true);
     document.body.style.cursor = 'grab';
@@ -105,8 +103,6 @@ function AxisArrow({ axis, color, position, rotation, onAxisDrag }: AxisArrowPro
 
   const handlePointerLeave = (e: any) => {
     if (dragging) return; 
-
-    console.log(`[AxisArrow-${axis}] 👋 onPointerLeave - HOVER OFF`);
     e.stopPropagation();
     setHovered(false);
     document.body.style.cursor = 'auto';
@@ -176,11 +172,6 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
   const groupRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
 
-  useEffect(() => {
-    console.log(`[TransformGizmo] Mounted, visible: ${visible}`);
-  }, []);
-
-
   useFrame(() => {
     if (groupRef.current && visible && camera) {
       const gizmoPos = new THREE.Vector3(...position);
@@ -196,7 +187,7 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
     return null;
   }
 
-  console.log(`[TransformGizmo] Rendering at position:`, position);
+ 
 
   return (
     <group 
@@ -223,7 +214,7 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
         position={[0.18, 0, 0]}
         rotation={[0, 0, -Math.PI / 2]}
         onAxisDrag={(axis, delta) => {
-          console.log(`[TransformGizmo] Callback: axis=${axis}, delta=${delta.toFixed(4)}`);
+         
           onMove(axis, delta);
         }}
       />
@@ -235,7 +226,7 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
         position={[0, 0.18, 0]}
         rotation={[0, 0, 0]}
         onAxisDrag={(axis, delta) => {
-          console.log(`[TransformGizmo] Callback: axis=${axis}, delta=${delta.toFixed(4)}`);
+         
           onMove(axis, delta);
         }}
       />
@@ -247,7 +238,7 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
         position={[0, 0, 0.18]}
         rotation={[Math.PI / 2, 0, 0]}
         onAxisDrag={(axis, delta) => {
-          console.log(`[TransformGizmo] Callback: axis=${axis}, delta=${delta.toFixed(4)}`);
+          
           onMove(axis, delta);
         }}
       />

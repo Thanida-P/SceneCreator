@@ -19,7 +19,7 @@ export interface WallPlacementInfo {
 }
 
 export class FurnitureItem extends Base3DObject {
-  protected metadata: FurnitureMetadata;
+  public metadata: FurnitureMetadata;
   protected isSelected: boolean = false;
   protected hasCollision: boolean = false;
   protected isFloating: boolean = false;

@@ -305,7 +305,6 @@ class SceneContentLogic {
 
       if (response.ok) {
         const data = await response.json();
-        console.log("Furniture catalog data:", data);
         const items = data.available_items.map((item: any) => ({
           id: item.id.toString(),
           name: item.name,
@@ -632,7 +631,7 @@ class SceneContentLogic {
       }
 
       const wallResponse = await makeAuthenticatedRequest(
-        `/digitalhomes/get_textures/${this.homeId}`,
+        `/digitalhomes/get_floor_textures/${this.homeId}`,
       );
 
       if (wallResponse.ok) {
@@ -1491,6 +1490,7 @@ class SceneContentLogic {
       this.sceneManager.removeFurniture(existingFurniture.getId());
       if (this.state.selectedItemId === existingFurniture.getId()) {
         this.updateState({ selectedItemId: null, showSlider: false });
+        
       }
       return;
     }
@@ -1538,7 +1538,7 @@ class SceneContentLogic {
           selectedItemId: uniqueId,
           rotationValue: initialRotation[1],
           showSlider: true,
-          showFurniture: false,
+         // showFurniture: false,
           selectedItemPlacementMode: 'floor',
         });
       }
@@ -1673,7 +1673,7 @@ class SceneContentLogic {
   this.sceneManager.moveFurniture(this.state.selectedItemId, newPos, false, false)
     .then((result) => {
       if (result.success) {
-        // Update gizmo position to match furniture
+       
         this.updateState({ gizmoPosition: newPos });
       } else if (result.needsConfirmation) {
         this.pendingMove = newPos;
@@ -1720,10 +1720,10 @@ class SceneContentLogic {
       break;
   }
 
-  // Apply rotation
+
   this.sceneManager.rotateFurniture(this.state.selectedItemId, newRot);
 
-  // Update rotation state
+
   const twoPi = Math.PI * 2;
   let normalizedRotation = newRot[1] % twoPi;
   if (normalizedRotation < 0) normalizedRotation += twoPi;
@@ -1766,7 +1766,7 @@ class SceneContentLogic {
   updateFrame(session: any, camera: THREE.Camera, delta: number): void {
     if (!session) return;
 
-    // Set alignment mode in navigation controller
+  
     const isAligning = this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world";
     if (this.navigationController) {
       this.navigationController.setAlignmentMode(isAligning);
@@ -1796,7 +1796,7 @@ class SceneContentLogic {
   }
 }
 
-// Wrapper for R3F hooks
+
 export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneContentProps) {
   const navigate = useNavigate();
   const { scene, camera } = useThree();
@@ -1882,7 +1882,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     }
   }, [xr.session, arModeRequested, state.loading]);
 
-  // Load home
+ 
   useEffect(() => {
     if (!logicRef.current) return;
     logicRef.current.loadHome(digitalHome);
@@ -1993,7 +1993,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
               />
             )}
 
-          {/* ROTATION GIZMO FOR ROTATION */}
+       
           {state.showRotationGizmo && state.rotationGizmoPosition && (
             <RotationGizmo
               position={state.rotationGizmoPosition}

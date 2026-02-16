@@ -6,9 +6,9 @@ import * as THREE from "three";
 export interface TextureOption {
   id: string;
   name: string;
-  imagePath: string; // Blob URL
+  imagePath: string;
   color?: string;
-  threeTexture?: THREE.Texture; // ✅ Already-loaded THREE.Texture
+  threeTexture?: THREE.Texture; 
 }
 
 export function TextureSelectorPanel({
@@ -28,8 +28,6 @@ export function TextureSelectorPanel({
 }) {
   const [hoveredTextureId, setHoveredTextureId] = React.useState<string | null>(null);
 
-  // ✅ SIMPLIFIED: No need for complex loading state
-  // Textures are already pre-loaded in SceneContentLogic
 
   if (!show) return null;
 
@@ -47,8 +45,6 @@ export function TextureSelectorPanel({
 
   const startX = -(texturesPerRow - 1) * spacing / 2;
   const startY = (gridHeight / 2) - 0.15;
-
-  console.log(`[TextureSelectorPanel] Rendering ${textures.length} textures`);
 
   return (
     <group>
@@ -80,7 +76,7 @@ export function TextureSelectorPanel({
         const isHovered = hoveredTextureId === texture.id;
         const isSelected = selectedTextureId === texture.id;
         
-        // ✅ SIMPLIFIED: Use pre-loaded THREE.Texture directly
+      
         const hasTexture = !!texture.threeTexture;
 
         return (
@@ -101,7 +97,7 @@ export function TextureSelectorPanel({
             >
               <circleGeometry args={[textureRadius, 32]} />
               <meshBasicMaterial
-                // ✅ Use pre-loaded THREE.Texture
+               
                 map={hasTexture ? texture.threeTexture : undefined}
                 color={hasTexture ? "#ffffff" : "#cccccc"}
               />

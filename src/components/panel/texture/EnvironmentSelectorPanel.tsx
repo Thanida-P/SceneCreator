@@ -50,7 +50,7 @@ function EnvironmentButton({
     if (texture.threeTexture) {
       setTextureLoaded(true);
     } else if (texture.imagePath) {
-      // If threeTexture not available, load from imagePath
+    
       const loader = new THREE.TextureLoader();
       loader.load(
         texture.imagePath,
@@ -73,7 +73,7 @@ function EnvironmentButton({
         onClick();
       }}
     >
-      {/* Button Background - Layer 0 (bottom) */}
+    
       <mesh position={[0, 0, 0]}>
         <RoundedPlane width={size} height={size} radius={0.01} />
         <meshStandardMaterial
@@ -85,18 +85,18 @@ function EnvironmentButton({
         />
       </mesh>
 
-      {/* ✅ Texture Image - Layer 1 (on top of background) */}
+     
       <mesh position={[0, 0, 0.001]}>
         <planeGeometry args={[size * 0.85, size * 0.85]} />
         {texture.threeTexture ? (
-          // Use the preloaded THREE.Texture if available
+        
           <meshStandardMaterial
             map={texture.threeTexture}
             metalness={0}
             roughness={0.8}
           />
         ) : texture.imagePath ? (
-          // Fallback to loading from imagePath
+      
           <meshStandardMaterial
             metalness={0}
             roughness={0.8}
@@ -107,7 +107,7 @@ function EnvironmentButton({
             />
           </meshStandardMaterial>
         ) : (
-          // Final fallback to solid color
+       
           <meshStandardMaterial
             color={texture.color}
             metalness={0}
@@ -116,7 +116,6 @@ function EnvironmentButton({
         )}
       </mesh>
 
-      {/* Selection Border - Layer 2 (on top of texture) */}
       {isSelected && (
         <mesh position={[0, 0, 0.002]}>
           <ringGeometry args={[size * 0.44, size * 0.48, 32]} />
@@ -124,7 +123,7 @@ function EnvironmentButton({
         </mesh>
       )}
 
-      {/* Checkmark - Layer 3 (on top of everything) */}
+   
       {isSelected && (
         <Text
           position={[0, 0, 0.003]}
@@ -138,7 +137,7 @@ function EnvironmentButton({
         </Text>
       )}
 
-      {/* Tooltip - Positioned below the button, separate from z-layering */}
+    
       {isHovered && (
         <group position={[0, -size / 2 - 0.05, 0.01]}>
           <mesh>
@@ -199,7 +198,7 @@ export function EnvironmentSelectorPanel({
 
   return (
     <group>
-      {/* Main Panel Background */}
+  
       <mesh position={[0, 0, 0]}>
         <RoundedPlane width={PANEL_WIDTH} height={PANEL_HEIGHT} radius={0.1} />
         <GradientBackground
@@ -212,7 +211,7 @@ export function EnvironmentSelectorPanel({
         />
       </mesh>
 
-      {/* Shadow */}
+  
       <mesh position={[0, -0.01, -0.03]}>
         <RoundedPlane width={PANEL_WIDTH} height={PANEL_HEIGHT} radius={0.1} />
         <meshStandardMaterial
@@ -223,7 +222,6 @@ export function EnvironmentSelectorPanel({
         />
       </mesh>
 
-      {/* Title */}
       <Text
         position={[0, PANEL_HEIGHT / 2 - 0.03, 0.01]}
         fontSize={0.045}
@@ -235,7 +233,7 @@ export function EnvironmentSelectorPanel({
         {title}
       </Text>
 
-      {/* Close Button (X) */}
+  
       <group
         position={[PANEL_WIDTH / 2 - 0.04, PANEL_HEIGHT / 2 - 0.04, 0.01]}
         onPointerDown={(e) => {
@@ -263,9 +261,9 @@ export function EnvironmentSelectorPanel({
         </Text>
       </group>
 
-      {/* Tab Container - Floor/Wall Toggle */}
+    
       <group position={[0, PANEL_HEIGHT / 2 - 0.12, 0]}>
-        {/* Floor Tab Button */}
+      
         <group
           onPointerDown={(e) => {
             e.stopPropagation();
@@ -292,7 +290,7 @@ export function EnvironmentSelectorPanel({
           </Text>
         </group>
 
-        {/* Wall Tab Button */}
+     
         <group
           onPointerDown={(e) => {
             e.stopPropagation();
@@ -320,13 +318,13 @@ export function EnvironmentSelectorPanel({
         </group>
       </group>
 
-      {/* Divider Line */}
+ 
       <mesh position={[0, PANEL_HEIGHT / 2 - 0.18, 0.005]}>
         <planeGeometry args={[PANEL_WIDTH - 0.1, 0.002]} />
         <meshBasicMaterial color="#D1D5DB" opacity={0.3} transparent />
       </mesh>
 
-      {/* Texture Grid Container */}
+   
       <group position={[0, PANEL_HEIGHT / 2 - 0.28, 0]}>
         {isLoading ? (
           <Text
@@ -385,7 +383,7 @@ export function EnvironmentSelectorPanel({
         )}
       </group>
 
-      {/* Info Text at Bottom */}
+
       <Text
         position={[0, -PANEL_HEIGHT / 2 + 0.05, 0.01]}
         fontSize={0.02}

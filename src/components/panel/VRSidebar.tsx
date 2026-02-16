@@ -81,7 +81,7 @@ function SidebarItem({ item, yPos, isActive, onHover, onClick, isHovered }: Side
 
   return (
     <group position={[SIDEBAR_CENTER_X, yPos, 0]}>
-      {/* Item Button */}
+  
       <group
         onPointerEnter={(e) => {
           e.stopPropagation();
@@ -111,7 +111,7 @@ function SidebarItem({ item, yPos, isActive, onHover, onClick, isHovered }: Side
           />
         </mesh>
 
-        {/* Icon */}
+   
         <Text
           position={[0.01, 0, 0.01]}
           fontSize={0.06}
@@ -122,7 +122,7 @@ function SidebarItem({ item, yPos, isActive, onHover, onClick, isHovered }: Side
           {item.icon}
         </Text>
 
-        {/* Active Indicator */}
+  
         {isActive && (
           <mesh position={[0.07, 0, 0.01]}>
             <planeGeometry args={[0.01, 0.12]} />
@@ -131,7 +131,7 @@ function SidebarItem({ item, yPos, isActive, onHover, onClick, isHovered }: Side
         )}
       </group>
 
-      {/* Tooltip on Hover */}
+   
       {isHovered && (
         <group position={[0.15, 0, 0]}>
           <mesh>
@@ -178,7 +178,7 @@ export function VRSidebar({
 
   return (
     <group position={[0.01, 0, 0]}>
-      {/* Sidebar Background */}
+ 
       <mesh position={[0.01, 0, -0.01]}>
         <GradientBackground
           width={SIDEBAR_WIDTH}
@@ -190,7 +190,7 @@ export function VRSidebar({
         />
       </mesh>
 
-      {/* Sidebar Items */}
+     
       {sidebarItems.map((item, index) => (
         <SidebarItem
           key={item.id}
@@ -203,7 +203,6 @@ export function VRSidebar({
         />
       ))}
 
-      {/* Divider lines between items */}
       {sidebarItems.map((_, index) => {
         if (index === sidebarItems.length - 1) return null;
         const yPos = 0.5 - index * 0.25 - 0.125;
