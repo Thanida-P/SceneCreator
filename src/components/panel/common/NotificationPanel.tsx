@@ -50,8 +50,9 @@ export function VRNotificationPanel({
           radius={0.1}
           color1="#EAF4FA" 
           color2="#F5F7FA"
-          opacity={0.95}
+          opacity={0.05}
         />
+
       </mesh>
 
       {/* Shadow */}
