@@ -1,10 +1,13 @@
 import * as React from "react";
+import * as THREE from "three";
+import { useLoader } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import { FurnitureItem } from "../../../core/objects/FurnitureItem";
 import { FurnitureImage } from "./FurnitureImage";
 import { RoundedPlane, GradientBackground, CardBackground } from "../common/PanelElements";
+import digitalClockIconUrl from "../../../assets/icons/digital-clock.png";
 
-export type FurnitureCategory = "all" | "living-room" | "bedroom" | "office-room" | "kitchen";
+export type FurnitureCategory = "all" | "living-room" | "bedroom" | "office-room" | "kitchen" | "widgets";
 
 const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   "all": "All Categories",
@@ -12,6 +15,7 @@ const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   "bedroom": "Bedroom",
   "office-room": "Office Room",
   "kitchen": "Kitchen",
+  "widgets": "Widgets",
 };
 
 const BACKEND_CATEGORY_MAP: Record<string, FurnitureCategory> = {
@@ -19,11 +23,32 @@ const BACKEND_CATEGORY_MAP: Record<string, FurnitureCategory> = {
   "Bedroom": "bedroom",
   "Office Room": "office-room",
   "Kitchen": "kitchen",
+  "Widgets": "widgets",
   "living-room": "living-room",
   "bedroom": "bedroom",
   "office-room": "office-room",
   "kitchen": "kitchen",
+  "widgets": "widgets",
 };
+
+export interface SystemWidgetDef {
+  id: string;
+  name: string;
+  widgetType: "clock";
+  category: "widgets";
+  image?: string;
+  type?: string;
+}
+
+export const SYSTEM_WIDGETS: SystemWidgetDef[] = [
+  {
+    id: "sys-widget-clock",
+    name: "Clock",
+    widgetType: "clock",
+    category: "widgets",
+    type: "Clock",
+  },
+];
 
 export function VRFurniturePanel({
   show,
@@ -56,29 +81,28 @@ export function VRFurniturePanel({
 
 
   const filteredCatalog = React.useMemo(() => {
+    if (selectedCategory === "widgets") {
+      return SYSTEM_WIDGETS;
+    }
     if (selectedCategory === "all") {
-      return catalog;
+      return [...catalog, ...SYSTEM_WIDGETS];
     }
     return catalog.filter((item: any) => {
       let itemCategory: FurnitureCategory = "all";
       let rawCategory: string | undefined;
-      
-   
+
       if (typeof item.getMetadata === 'function') {
-  
         rawCategory = item.getMetadata().category;
       } else if (item?.metadata?.category) {
-
         rawCategory = item.metadata.category;
       } else if (item?.category) {
-      
         rawCategory = item.category;
       }
-      
+
       if (rawCategory) {
         itemCategory = BACKEND_CATEGORY_MAP[rawCategory] || "all";
       }
-      
+
       return itemCategory === selectedCategory;
     });
   }, [catalog, selectedCategory]);
@@ -301,6 +325,11 @@ export function VRFurniturePanel({
                         <planeGeometry args={[0.2, 0.2]} />
                         <FurnitureImageMaterial image={f.image} />
                       </mesh>
+                    ) : (f as any).widgetType === "clock" ? (
+                      <mesh>
+                        <planeGeometry args={[0.2, 0.2]} />
+                        <ClockPreviewTexture url={digitalClockIconUrl} />
+                      </mesh>
                     ) : (
                       <mesh>
                         <planeGeometry args={[0.2, 0.2]} />
@@ -470,75 +499,210 @@ function CategoryButtons({
   setHoveredButton: (button: string | null) => void;
   yPosition: number;
 }) {
-  const categories: FurnitureCategory[] = ["all", "living-room", "bedroom", "office-room", "kitchen"];
+  const categories: FurnitureCategory[] = ["all", "living-room", "bedroom", "office-room", "kitchen", "widgets"];
+  const [scrollOffset, setScrollOffset] = React.useState(0);
+  
   const buttonWidth = 0.16;
   const buttonHeight = 0.08;
   const spacing = 0.02;
-  const totalWidth = categories.length * buttonWidth + (categories.length - 1) * spacing;
+  const viewportWidth = 0.7;
+  const arrowButtonWidth = 0.06;
+  const arrowSpacing = 0.015;
+  
+  const totalContentWidth = categories.length * (buttonWidth + spacing) - spacing;
+  const maxScrollOffset = Math.max(0, totalContentWidth - viewportWidth);
+  
+  const canScrollLeft = scrollOffset > 0;
+  const canScrollRight = scrollOffset < maxScrollOffset;
+
+  const handleScrollLeft = () => {
+    setScrollOffset(Math.max(0, scrollOffset - (buttonWidth + spacing) * 2));
+  };
+
+  const handleScrollRight = () => {
+    setScrollOffset(Math.min(maxScrollOffset, scrollOffset + (buttonWidth + spacing) * 2));
+  };
+
+  const leftClipPlane = React.useMemo(() => new THREE.Plane(new THREE.Vector3(1, 0, 0), viewportWidth / 2), [viewportWidth]);
+  const rightClipPlane = React.useMemo(() => new THREE.Plane(new THREE.Vector3(-1, 0, 0), viewportWidth / 2), [viewportWidth]);
 
   return (
     <group position={[0, yPosition, 0.01]}>
-      {categories.map((category, index) => {
-        const isSelected = selectedCategory === category;
-        const isHovered = hoveredButton === `category-${category}`;
-        const xOffset = -totalWidth / 2 + index * (buttonWidth + spacing) + buttonWidth / 2;
-
-        return (
-          <group
-            key={category}
-            position={[xOffset, 0, 0]}
-            onPointerEnter={(e) => {
-              e.stopPropagation();
-              setHoveredButton(`category-${category}`);
-            }}
-            onPointerLeave={(e) => {
-              e.stopPropagation();
-              setHoveredButton(null);
-            }}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              onSelectCategory(category);
-            }}
+      {/* Left scroll arrow */}
+      {canScrollLeft && (
+        <group
+          position={[-viewportWidth + arrowButtonWidth + arrowSpacing + 0.23, 0, 0]}
+          onPointerEnter={(e) => {
+            e.stopPropagation();
+            setHoveredButton('scroll-left');
+          }}
+          onPointerLeave={(e) => {
+            e.stopPropagation();
+            setHoveredButton(null);
+          }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            handleScrollLeft();
+          }}
+        >
+          <mesh>
+            <RoundedPlane width={arrowButtonWidth} height={buttonHeight} radius={0.02} />
+            <meshStandardMaterial
+              color={hoveredButton === 'scroll-left' ? "#A5D1E7" : "#DCEEFB"}
+              emissive="#ffffff"
+              emissiveIntensity={hoveredButton === 'scroll-left' ? 0.2 : 0.1}
+              roughness={0.5}
+            />
+          </mesh>
+          <Text
+            position={[0, 0, 0.01]}
+            fontSize={0.04}
+            color="#334155"
+            anchorX="center"
+            anchorY="middle"
           >
-    
-            <mesh position={[0, 0, 0]}>
-              <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.02} />
-              <meshStandardMaterial
-                color={isSelected ? "#66B9E2" : isHovered ? "#A5D1E7" : "#DCEEFB"}
-                emissive={isSelected || isHovered ? "#ffffff" : "#f5f5f5"}
-                emissiveIntensity={isSelected ? 0.3 : isHovered ? 0.2 : 0.1}
-                roughness={0.5}
-              />
-            </mesh>
+            ‹
+          </Text>
+        </group>
+      )}
 
-    
-            <mesh position={[0, -0.005, -0.01]}>
-              <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.02} />
-              <meshStandardMaterial
-                color="#000000"
-                opacity={0.08}
-                transparent
-                roughness={1.0}
-              />
-            </mesh>
+      {/*category buttons*/}
+      <group position={[0, 0, 0]}>
+        {categories.map((category, index) => {
+          const isSelected = selectedCategory === category;
+          const isHovered = hoveredButton === `category-${category}`;
+          const xOffset = -viewportWidth / 2 + buttonWidth / 2 + index * (buttonWidth + spacing) - scrollOffset;
 
-            <Text
-              position={[0, 0, 0.01]}
-              fontSize={0.025}
-              color={isSelected ? "#161111" : "#334155"}
-              anchorX="center"
-              anchorY="middle"
-              fontWeight={isSelected ? "600" : "400"}
+          const buttonLeft = xOffset - buttonWidth / 2;
+          const buttonRight = xOffset + buttonWidth / 2;
+          const viewportLeft = -viewportWidth / 2;
+          const viewportRight = viewportWidth / 2;
+
+          if (buttonRight < viewportLeft || buttonLeft > viewportRight) {
+            return null;
+          }
+
+          return (
+            <group
+              key={category}
+              position={[xOffset, 0, 0]}
+              onPointerEnter={(e) => {
+                e.stopPropagation();
+                if (xOffset >= viewportLeft && xOffset <= viewportRight) {
+                  setHoveredButton(`category-${category}`);
+                }
+              }}
+              onPointerLeave={(e) => {
+                e.stopPropagation();
+                setHoveredButton(null);
+              }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                if (xOffset >= viewportLeft && xOffset <= viewportRight) {
+                  onSelectCategory(category);
+                }
+              }}
             >
-              {CATEGORY_LABELS[category]}
-            </Text>
-          </group>
-        );
-      })}
+              <mesh position={[0, 0, 0]}>
+                <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.02} />
+                <meshStandardMaterial
+                  color={isSelected ? "#66B9E2" : isHovered ? "#A5D1E7" : "#DCEEFB"}
+                  emissive={isSelected || isHovered ? "#ffffff" : "#f5f5f5"}
+                  emissiveIntensity={isSelected ? 0.3 : isHovered ? 0.2 : 0.1}
+                  roughness={0.5}
+                  clippingPlanes={[leftClipPlane, rightClipPlane]}
+                  clipIntersection={false}
+                />
+              </mesh>
+
+              <mesh position={[0, -0.005, -0.01]}>
+                <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.02} />
+                <meshStandardMaterial
+                  color="#000000"
+                  opacity={0.08}
+                  transparent
+                  roughness={1.0}
+                  clippingPlanes={[leftClipPlane, rightClipPlane]}
+                  clipIntersection={false}
+                />
+              </mesh>
+
+              <Text
+                position={[0, 0, 0.01]}
+                fontSize={0.025}
+                color={isSelected ? "#161111" : "#334155"}
+                anchorX="center"
+                anchorY="middle"
+                fontWeight={isSelected ? "600" : "400"}
+                clipPlanes={[leftClipPlane, rightClipPlane]}
+              >
+                {CATEGORY_LABELS[category]}
+              </Text>
+            </group>
+          );
+        })}
+      </group>
+
+      {/* Right scroll arrow */}
+      {canScrollRight && (
+        <group
+          position={[viewportWidth - arrowButtonWidth - arrowSpacing - 0.24, 0, 0]}
+          onPointerEnter={(e) => {
+            e.stopPropagation();
+            setHoveredButton('scroll-right');
+          }}
+          onPointerLeave={(e) => {
+            e.stopPropagation();
+            setHoveredButton(null);
+          }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            handleScrollRight();
+          }}
+        >
+          <mesh>
+            <RoundedPlane width={arrowButtonWidth} height={buttonHeight} radius={0.02} />
+            <meshStandardMaterial
+              color={hoveredButton === 'scroll-right' ? "#A5D1E7" : "#DCEEFB"}
+              emissive="#ffffff"
+              emissiveIntensity={hoveredButton === 'scroll-right' ? 0.2 : 0.1}
+              roughness={0.5}
+            />
+          </mesh>
+          <Text
+            position={[0, 0, 0.01]}
+            fontSize={0.04}
+            color="#334155"
+            anchorX="center"
+            anchorY="middle"
+          >
+            ›
+          </Text>
+        </group>
+      )}
     </group>
   );
 }
 
 function FurnitureImageMaterial({ image }: { image: string }) {
   return <FurnitureImage image={image} />;
+}
+
+function ClockPreviewTexture({ url }: { url: string }) {
+  const texture = useLoader(THREE.TextureLoader, url);
+  React.useEffect(() => {
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
+  }, [texture]);
+  return (
+    <meshBasicMaterial
+      map={texture}
+      transparent
+      side={THREE.FrontSide}
+      toneMapped={false}
+    />
+  );
 }

@@ -20,6 +20,7 @@ import {
   FurnitureItem,
   FurnitureMetadata,
 } from "../../core/objects/FurnitureItem";
+import { ClockWidget } from "../../core/objects/ClockWidget";
 import { HomeModel } from "../../core/objects/HomeModel";
 import {
   NavigationController,
@@ -1518,17 +1519,44 @@ class SceneContentLogic {
     const catalogId = f.id;
     const allFurniture = this.sceneManager.getAllFurniture();
 
-    const existingFurniture = allFurniture.find((item) => {
-      const placedCatalogId = item.getId().split("-")[0];
-      return placedCatalogId === catalogId;
-    });
+    const getPlacedCatalogId = (itemId: string) =>
+      itemId.replace(/-\d+$/, "") || itemId;
+    const existingFurniture = allFurniture.find(
+      (item) => getPlacedCatalogId(item.getId()) === catalogId,
+    );
 
     if (existingFurniture) {
       this.sceneManager.removeFurniture(existingFurniture.getId());
       if (this.state.selectedItemId === existingFurniture.getId()) {
         this.updateState({ selectedItemId: null, showSlider: false });
-        
       }
+      return;
+    }
+
+    const spawnPos = this.sceneManager.calculateSpawnPosition(camera, 2);
+    const initialRotation: [number, number, number] = [0, 0, 0];
+    const uniqueId = `${f.id}-${Date.now()}`;
+
+    if (f.widgetType === "clock") {
+      const newFurniture = new ClockWidget(uniqueId, f.name, {
+        position: spawnPos,
+        rotation: initialRotation,
+        scale: this.state.sliderValue,
+      });
+      newFurniture.setScale(this.state.sliderValue);
+
+      this.sceneManager.addFurniture(newFurniture).then(() => {
+        this.sceneManager!.selectFurniture(uniqueId);
+        if (this.sceneManager!.selectFurniture(uniqueId)) {
+          this.furnitureController?.setSelectedFurniture(uniqueId);
+          this.updateState({
+            selectedItemId: uniqueId,
+            rotationValue: initialRotation[1],
+            showSlider: true,
+            selectedItemPlacementMode: "floor",
+          });
+        }
+      });
       return;
     }
 
@@ -1539,11 +1567,6 @@ class SceneContentLogic {
     }
 
     const isWallMountable = f.wall_mountable || false;
-
-    const spawnPos = this.sceneManager.calculateSpawnPosition(camera, 2);
-    const initialRotation: [number, number, number] = [0, 0, 0];
-
-    const uniqueId = `${f.id}-${Date.now()}`;
 
     const metadata: FurnitureMetadata = {
       description: f.description,
@@ -1795,7 +1818,10 @@ class SceneContentLogic {
     if (!this.sceneManager) return [];
     return this.sceneManager
       .getAllFurniture()
-      .map((item) => item.getId().split("-")[0]);
+      .map((item) => {
+        const id = item.getId();
+        return id.replace(/-\d+$/, "") || id;
+      });
   }
 
   updateFrame(session: any, camera: THREE.Camera, delta: number): void {
