@@ -34,7 +34,7 @@ const BACKEND_CATEGORY_MAP: Record<string, FurnitureCategory> = {
 export interface SystemWidgetDef {
   id: string;
   name: string;
-  widgetType: "clock";
+  widgetType: "clock" | "whiteboard";
   category: "widgets";
   image?: string;
   type?: string;
@@ -47,6 +47,13 @@ export const SYSTEM_WIDGETS: SystemWidgetDef[] = [
     widgetType: "clock",
     category: "widgets",
     type: "Clock",
+  },
+  {
+    id: "sys-widget-whiteboard",
+    name: "Whiteboard",
+    widgetType: "whiteboard",
+    category: "widgets",
+    type: "Whiteboard",
   },
 ];
 
@@ -330,6 +337,22 @@ export function VRFurniturePanel({
                         <planeGeometry args={[0.2, 0.2]} />
                         <ClockPreviewTexture url={digitalClockIconUrl} />
                       </mesh>
+                    ) : (f as any).widgetType === "whiteboard" ? (
+                      <group>
+                        <mesh>
+                          <planeGeometry args={[0.2, 0.2]} />
+                          <meshStandardMaterial color="#f8fafc" />
+                        </mesh>
+                        <Text
+                          position={[0, 0, 0.01]}
+                          fontSize={0.025}
+                          color="#64748b"
+                          anchorX="center"
+                          anchorY="middle"
+                        >
+                          Whiteboard
+                        </Text>
+                      </group>
                     ) : (
                       <mesh>
                         <planeGeometry args={[0.2, 0.2]} />

@@ -15,12 +15,14 @@ import { VRControlPanel } from "../panel/control/ControlPanel";
 import { ControlPanelToggle } from "../panel/control/ControlPanelToggle";
 import { VRNotificationPanel } from "../panel/common/NotificationPanel";
 import { VRPreciseCollisionPanel } from "../panel/furniture/FurnitureCollisionPanel";
+import { VRWhiteboardPanel } from "../panel/VRWhiteboardPanel";
 import { SceneManager } from "../../core/managers/SceneManager";
 import {
   FurnitureItem,
   FurnitureMetadata,
 } from "../../core/objects/FurnitureItem";
 import { ClockWidget } from "../../core/objects/ClockWidget";
+import { WhiteboardWidget, type WhiteboardTool } from "../../core/objects/WhiteboardWidget";
 import { HomeModel } from "../../core/objects/HomeModel";
 import {
   NavigationController,
@@ -42,6 +44,54 @@ import {
 
 const DIGITAL_HOME_PLATFORM_BASE_URL = import.meta.env
   .VITE_DIGITAL_HOME_PLATFORM_URL;
+
+function WhiteboardHitTarget({
+  boardMesh,
+  isSelected,
+  onSelect,
+  onPointerMove,
+  onPointerLeave,
+}: {
+  boardMesh: THREE.Mesh;
+  isSelected: boolean;
+  onSelect: () => void;
+  onPointerMove: (point: THREE.Vector3) => void;
+  onPointerLeave: () => void;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  useFrame(() => {
+    if (!groupRef.current || !boardMesh) return;
+    groupRef.current.position.setFromMatrixPosition(boardMesh.matrixWorld);
+    groupRef.current.quaternion.setFromRotationMatrix(boardMesh.matrixWorld);
+    groupRef.current.scale.setFromMatrixScale(boardMesh.matrixWorld);
+  });
+  return (
+    <group ref={groupRef}>
+      <mesh
+        onPointerDown={(e: any) => {
+          e.stopPropagation();
+          onSelect();
+        }}
+        onClick={(e: any) => {
+          e.stopPropagation();
+          onSelect();
+        }}
+        onPointerMove={(e: any) => {
+          e.stopPropagation();
+          if (isSelected) onPointerMove(e.point.clone());
+        }}
+        onPointerLeave={() => onPointerLeave()}
+      >
+        <planeGeometry args={[1.0, 0.6]} />
+        <meshBasicMaterial
+          visible={false}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  );
+}
 
 interface SceneContentProps {
   homeId: string;
@@ -103,6 +153,8 @@ interface SceneState {
   selectedWallId: string | undefined;
   loadingEnvironment: boolean;
   experienceMode: boolean;
+  experienceWhiteboardId: string | null;
+  whiteboardTool: WhiteboardTool;
 }
 
 class SceneContentLogic {
@@ -116,6 +168,10 @@ class SceneContentLogic {
   public sceneManager: SceneManager | null = null;
   public navigationController: NavigationController | null = null;
   public furnitureController: FurnitureEditController | null = null;
+  public renderer: THREE.WebGLRenderer | null = null;
+  private lastFrameWhiteboardDrawing = false;
+  public lastWhiteboardPointerPoint: THREE.Vector3 | null = null;
+  public lastWhiteboardPointerId: string | null = null;
 
   public pendingMove: [number, number, number] | null = null;
   public currentAABBPosition: [number, number, number] | null = null;
@@ -180,6 +236,8 @@ class SceneContentLogic {
       selectedWallId: undefined,
       loadingEnvironment: false,
       experienceMode: false,
+      experienceWhiteboardId: null,
+      whiteboardTool: "pen",
     };
   }
 
@@ -1560,6 +1618,29 @@ class SceneContentLogic {
       return;
     }
 
+    if (f.widgetType === "whiteboard") {
+      const newFurniture = new WhiteboardWidget(uniqueId, f.name, {
+        position: spawnPos,
+        rotation: initialRotation,
+        scale: this.state.sliderValue,
+      });
+      newFurniture.setScale(this.state.sliderValue);
+
+      this.sceneManager.addFurniture(newFurniture).then(() => {
+        this.sceneManager!.selectFurniture(uniqueId);
+        if (this.sceneManager!.selectFurniture(uniqueId)) {
+          this.furnitureController?.setSelectedFurniture(uniqueId);
+          this.updateState({
+            selectedItemId: uniqueId,
+            rotationValue: initialRotation[1],
+            showSlider: true,
+            selectedItemPlacementMode: "floor",
+          });
+        }
+      });
+      return;
+    }
+
     const modelPath = this.modelUrlCache.get(f.model_id);
     if (!modelPath) {
       console.warn("Model not loaded yet for:", f.name);
@@ -1692,6 +1773,55 @@ class SceneContentLogic {
         });
       }
     }
+  }
+
+  handleSelectWhiteboardInExperience(id: string): void {
+    const furniture = this.sceneManager?.getFurniture(id);
+    if (!furniture || furniture.getMetadata().type !== "Whiteboard") return;
+    this.updateState({
+      experienceWhiteboardId: id,
+      whiteboardTool: "pen",
+    });
+  }
+
+  handleExitWhiteboardDrawing(): void {
+    const id = this.state.experienceWhiteboardId;
+    if (id) {
+      const wb = this.sceneManager?.getFurniture(id) as WhiteboardWidget | undefined;
+      wb?.endStroke();
+    }
+    this.updateState({ experienceWhiteboardId: null });
+  }
+
+  handleSetWhiteboardTool(tool: WhiteboardTool): void {
+    const id = this.state.experienceWhiteboardId;
+    if (id) {
+      const wb = this.sceneManager?.getFurniture(id) as WhiteboardWidget | undefined;
+      wb?.endStroke();
+    }
+    this.updateState({ whiteboardTool: tool });
+  }
+
+  handleWhiteboardClear(): void {
+    const id = this.state.experienceWhiteboardId;
+    if (!id) return;
+    const wb = this.sceneManager?.getFurniture(id) as WhiteboardWidget | undefined;
+    wb?.clear?.();
+  }
+
+  recordWhiteboardPointerHit(whiteboardId: string, worldPoint: THREE.Vector3): void {
+    this.lastWhiteboardPointerId = whiteboardId;
+    if (!this.lastWhiteboardPointerPoint) this.lastWhiteboardPointerPoint = new THREE.Vector3();
+    this.lastWhiteboardPointerPoint.copy(worldPoint);
+  }
+
+  clearWhiteboardPointerHit(): void {
+    const wbId = this.state.experienceWhiteboardId;
+    if (wbId) {
+      const wb = this.sceneManager?.getFurniture(wbId) as WhiteboardWidget | undefined;
+      wb?.endStroke();
+    }
+    this.lastWhiteboardPointerId = null;
   }
 
   handleGizmoMove(axis: "x" | "y" | "z", delta: number): void {
@@ -1827,11 +1957,10 @@ class SceneContentLogic {
   updateFrame(session: any, camera: THREE.Camera, delta: number): void {
     if (!session) return;
 
-  
     const isAligning = this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world";
     if (this.navigationController) {
       this.navigationController.setAlignmentMode(isAligning);
-      
+
       if (isAligning && this.sceneManager?.getHomeModel()) {
         this.navigationController.setHomeModelGroup(this.sceneManager.getHomeModel()!.getGroup());
       } else {
@@ -1839,17 +1968,71 @@ class SceneContentLogic {
       }
     }
 
+    let whiteboardDrawingThisFrame = false;
+    const wbId = this.state.experienceWhiteboardId;
+    if (this.state.experienceMode && wbId && this.sceneManager) {
+      const wb = this.sceneManager.getFurniture(wbId) as WhiteboardWidget | undefined;
+      if (wb) {
+        let drawPoint: THREE.Vector3 | null = null;
+        const usePointerHit =
+          this.lastWhiteboardPointerId === wbId && this.lastWhiteboardPointerPoint;
+        if (usePointerHit && session.inputSources) {
+          for (let i = 0; i < session.inputSources.length; i++) {
+            const gamepad = session.inputSources[i]?.gamepad;
+            const trigger = gamepad?.buttons?.[0]?.pressed ?? false;
+            const grip = gamepad?.buttons?.[1]?.pressed ?? false;
+            if (trigger || grip) {
+              drawPoint = this.lastWhiteboardPointerPoint;
+              break;
+            }
+          }
+        }
+        if (!drawPoint && this.renderer?.xr && session.inputSources) {
+          const boardMesh = wb.getBoardMesh?.();
+          if (boardMesh) {
+            const raycaster = new THREE.Raycaster();
+            const origin = new THREE.Vector3();
+            const direction = new THREE.Vector3();
+            for (let i = 0; i <= 1; i++) {
+              const controller = (this.renderer as any).xr.getController?.(i);
+              if (!controller) continue;
+              const gamepad = session.inputSources[i]?.gamepad;
+              const trigger = gamepad?.buttons?.[0]?.pressed ?? false;
+              const grip = gamepad?.buttons?.[1]?.pressed ?? false;
+              if (!trigger && !grip) continue;
+              controller.getWorldPosition(origin);
+              controller.getWorldDirection(direction);
+              raycaster.set(origin, direction);
+              const hits = raycaster.intersectObject(boardMesh, true);
+              if (hits.length > 0) {
+                drawPoint = hits[0].point;
+                break;
+              }
+            }
+          }
+        }
+        if (drawPoint) {
+          if (!this.lastFrameWhiteboardDrawing) wb.startStroke();
+          wb.drawAt(drawPoint, this.state.whiteboardTool);
+          whiteboardDrawingThisFrame = true;
+        } else if (this.lastFrameWhiteboardDrawing) {
+          wb.endStroke();
+        }
+      }
+    }
+    this.lastFrameWhiteboardDrawing = whiteboardDrawingThisFrame;
+
     const canNavigate = (this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world") ||
                        (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free");
-    
-    if (canNavigate) {
+    if (canNavigate && !whiteboardDrawingThisFrame) {
       this.navigationController?.update(session, camera, delta);
     }
 
-    if (this.state.alignmentStatus === "aligned" && 
-        !this.state.navigationMode && 
-        this.state.selectedItemId && 
-        this.furnitureController) {
+    if (this.state.alignmentStatus === "aligned" &&
+        !this.state.navigationMode &&
+        this.state.selectedItemId &&
+        this.furnitureController &&
+        !this.state.experienceMode) {
       this.furnitureController.update(session, camera, delta);
     }
 
@@ -1907,6 +2090,8 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     showAlignmentConfirm: false,
     homeTransparent: false,
     experienceMode: false,
+    experienceWhiteboardId: null,
+    whiteboardTool: "pen",
   });
 
   const logicRef = useRef<SceneContentLogic | null>(null);
@@ -1960,8 +2145,9 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     logicRef.current.loadDeployedItems();
   }, [logicRef.current?.modelUrlCache.size]);
 
-  useFrame((_state, delta) => {
+  useFrame((state, delta) => {
     if (!logicRef.current) return;
+    logicRef.current.renderer = state.gl;
 
     logicRef.current.sceneManager?.updateAnimations(delta);
 
@@ -2015,37 +2201,65 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
             <primitive object={logic.sceneManager.getHomeModel()!.getGroup()} />
           )}
           
-          {logic.sceneManager.getAllFurniture().map((furniture) => (
-            <primitive
-              key={furniture.getId()}
-              object={furniture.getGroup()}
-              onClick={(e: any) => {
-                let target = e.object;
-                let isGizmoClick = false;
-                let depth = 0;
+          {logic.sceneManager.getAllFurniture().map((furniture) => {
+            const meta = furniture.getMetadata?.();
+            const isWhiteboard = meta?.type === "Whiteboard";
+            const boardMesh =
+              isWhiteboard ? (furniture as WhiteboardWidget).getBoardMesh?.() ?? null : null;
 
-                while (target && depth < 10) {
-                  if (target.userData?.isGizmo) {
-                    isGizmoClick = true;
-                    break;
-                  }
+            const handleFurnitureClick = (e: any) => {
+              let target = e.object;
+              let isGizmoClick = false;
+              let depth = 0;
 
-                    target = target.parent;
-                    depth++;
-                  }
-
-                if (isGizmoClick) {
-                  e.stopPropagation();
-                  return;
+              while (target && depth < 10) {
+                if (target.userData?.isGizmo) {
+                  isGizmoClick = true;
+                  break;
                 }
+                target = target.parent;
+                depth++;
+              }
 
-                if (state.alignmentStatus === "aligned" && !state.navigationMode && !uiLocked && !state.experienceMode) {
+              if (isGizmoClick) {
+                e.stopPropagation();
+                return;
+              }
+
+              if (state.alignmentStatus === "aligned" && !state.navigationMode && !uiLocked) {
+                if (state.experienceMode) {
+                  if (isWhiteboard) {
+                    e.stopPropagation();
+                    logic.handleSelectWhiteboardInExperience(furniture.getId());
+                  }
+                } else {
                   e.stopPropagation();
                   logic.handleSelectItem(furniture.getId());
                 }
-              }}
-            />
-          ))}
+              }
+            };
+
+            return (
+              <React.Fragment key={furniture.getId()}>
+                <primitive
+                  object={furniture.getGroup()}
+                  onClick={handleFurnitureClick}
+                  onPointerDown={handleFurnitureClick}
+                />
+                {isWhiteboard && state.experienceMode && boardMesh && (
+                  <WhiteboardHitTarget
+                    boardMesh={boardMesh}
+                    isSelected={state.experienceWhiteboardId === furniture.getId()}
+                    onSelect={() => logic.handleSelectWhiteboardInExperience(furniture.getId())}
+                    onPointerMove={(point) =>
+                      logic.recordWhiteboardPointerHit(furniture.getId(), point)
+                    }
+                    onPointerLeave={() => logic.clearWhiteboardPointerHit()}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
 
             {state.showTransformGizmo && state.gizmoPosition && (
               <TransformGizmo
@@ -2196,6 +2410,21 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
             onClose={() => logic.updateState({ showScalePanel: false })}
           />
         )}
+      </HeadLockedUI>
+      <HeadLockedUI
+        distance={1.5}
+        verticalOffset={0}
+        enabled={!!state.experienceWhiteboardId}
+      >
+        <group position={[0.4, 0, 0]}>
+          <VRWhiteboardPanel
+            show={!!state.experienceWhiteboardId}
+            currentTool={state.whiteboardTool}
+            onSelectTool={(tool) => logic.handleSetWhiteboardTool(tool)}
+            onExit={() => logic.handleExitWhiteboardDrawing()}
+            onClear={() => logic.handleWhiteboardClear()}
+          />
+        </group>
       </HeadLockedUI>
       <HeadLockedUI
         distance={1.4}
