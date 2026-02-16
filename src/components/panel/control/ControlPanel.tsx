@@ -13,6 +13,8 @@ export function VRControlPanel({
   onToggleAlignment,
   homeTransparent = false,
   onToggleTransparency,
+  experienceMode = false,
+  onToggleExperienceMode,
 }: {
   show: boolean;
   onSave: () => void;
@@ -25,14 +27,16 @@ export function VRControlPanel({
   onToggleAlignment?: () => void;
   homeTransparent?: boolean;
   onToggleTransparency?: () => void;
+  experienceMode?: boolean;
+  onToggleExperienceMode?: () => void;
 }) {
   const [hoveredButton, setHoveredButton] = React.useState<string | null>(null);
 
   if (!show) return null;
 
-  const panelWidth = 0.6;
-  const panelHeight = 1.2;
-  const buttonWidth = 0.45;
+  const panelWidth = 0.72;
+  const panelHeight = 1.3;
+  const buttonWidth = 0.57;
   const buttonHeight = 0.1;
 
   return (
@@ -66,7 +70,7 @@ export function VRControlPanel({
       </Text>
 
       {/* Save Button */}
-      <group position={[0, 0.285, 0.01]}>
+      <group position={[0, 0.385, 0.01]}>
         <mesh
           onPointerEnter={(e) => {
             e.stopPropagation();
@@ -106,14 +110,14 @@ export function VRControlPanel({
         </Text>
       </group>
 
-      <group position={[0, 0.27, 0]}>
+      <group position={[0, 0.37, 0]}>
         <mesh>
           <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
         </mesh>
       </group>
 
       {/* Instruction Button */}
-      <group position={[0, 0.135, 0.01]}>
+      <group position={[0, 0.235, 0.01]}>
         <mesh
           onPointerEnter={(e) => {
             e.stopPropagation();
@@ -147,7 +151,7 @@ export function VRControlPanel({
         </Text>
       </group>
 
-      <group position={[0, 0.12, 0]}>
+      <group position={[0, 0.22, 0]}>
         <mesh>
           <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
         </mesh>
@@ -156,7 +160,7 @@ export function VRControlPanel({
       {/* Alignment Mode Toggle Button */}
       {alignmentMode && onToggleAlignment && (
         <>
-          <group position={[0, -0.02, 0.01]}>
+          <group position={[0, 0.08, 0.01]}>
             <mesh
               onPointerEnter={(e) => {
                 e.stopPropagation();
@@ -190,7 +194,7 @@ export function VRControlPanel({
             </Text>
           </group>
 
-          <group position={[0, -0.035, 0]}>
+          <group position={[0, 0.065, 0]}>
             <mesh>
               <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
             </mesh>
@@ -201,7 +205,7 @@ export function VRControlPanel({
       {/* Mode Switch */}
       {onToggleTransparency && (
         <>
-          <group position={[0, -0.175, 0.01]}>
+          <group position={[0, -0.075, 0.01]}>
             <mesh
               onPointerEnter={(e) => {
                 e.stopPropagation();
@@ -235,7 +239,52 @@ export function VRControlPanel({
             </Text>
           </group>
  
-          <group position={[0, -0.19, 0]}>
+          <group position={[0, -0.09, 0]}>
+            <mesh>
+              <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
+            </mesh>
+          </group>
+        </>
+      )}
+
+      {/* Experience Mode Toggle */}
+      {onToggleExperienceMode && (
+        <>
+          <group position={[0, -0.225, 0.01]}>
+            <mesh
+              onPointerEnter={(e) => {
+                e.stopPropagation();
+                setHoveredButton("experienceMode");
+              }}
+              onPointerLeave={(e) => {
+                e.stopPropagation();
+                setHoveredButton(null);
+              }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onToggleExperienceMode();
+              }}
+            >
+              <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
+              <meshStandardMaterial
+                color={hoveredButton === "experienceMode" ? "#A5D1E7" : experienceMode ? "#FFB84D" : "#66B9E2"}
+                emissive={hoveredButton === "experienceMode" ? "#66B9E2" : experienceMode ? "#FFB84D" : "#66B9E2"}
+                emissiveIntensity={hoveredButton === "experienceMode" ? 0.5 : experienceMode ? 0.4 : 0.3}
+              />
+            </mesh>
+            <Text
+              position={[0, 0, 0.01]}
+              fontSize={0.04}
+              color="#334155"
+              anchorX="center"
+              anchorY="middle"
+              fontWeight={550}
+            >
+              {experienceMode ? "Switch to Editing Mode" : "Switch to Experience Mode"}
+            </Text>
+          </group>
+
+          <group position={[0, -0.24, 0]}>
             <mesh>
               <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
             </mesh>
@@ -245,7 +294,7 @@ export function VRControlPanel({
  
 
       {/* Back Button */}
-      <group position={[0, -0.325, 0.01]}>
+      <group position={[0, -0.375, 0.01]}>
         <mesh
           onPointerEnter={(e) => {
             e.stopPropagation();
@@ -279,14 +328,14 @@ export function VRControlPanel({
         </Text>
       </group>
 
-      <group position={[0, -0.34, 0]}>
+      <group position={[0, -0.39, 0]}>
         <mesh>
           <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
         </mesh>
       </group>
 
       {/* Logout Button */}
-      <group position={[0, -0.475, 0.01]}>
+      <group position={[0, -0.525, 0.01]}>
         <mesh
           onPointerEnter={(e) => {
             e.stopPropagation();
@@ -320,7 +369,7 @@ export function VRControlPanel({
         </Text>
       </group>
 
-      <group position={[0, -0.49, 0]}>
+      <group position={[0, -0.54, 0]}>
         <mesh>
           <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
         </mesh>
