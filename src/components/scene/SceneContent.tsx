@@ -27,7 +27,8 @@ import {
 } from "../../core/controllers/XRControllerBase";
 import { makeAuthenticatedRequest, logout } from "../../utils/Auth";
 import { VRSidebar } from "../panel/VRSidebar";
-import { VRAlignmentPanel, VRAlignmentConfirmPanel } from "../panel/VRAlignmentPanel";
+// import { VRAlignmentPanel, VRAlignmentConfirmPanel } from "../panel/VRAlignmentPanel";
+import { VRAlignmentPanel } from "../panel/VRAlignmentPanel";
 import { TransformGizmo } from "../panel/TransformGizmo";
 import { RotationGizmo } from "../panel/RotationGizmo";
 import { CornerSelectionVisualization } from "../panel/CornerSelectionVisualization";
@@ -102,6 +103,7 @@ interface SceneState {
   showHeadTrackingAlignment: boolean;
   alignmentState: 'idle' | 'selectingCorner' | 'aligningFirstCorner' | 'aligningSecondCorner' | 'aligningThirdCorner' | 'aligningFourthCorner' | 'completed';
   alignmentARModeRequested: boolean;
+  waitingForAlignmentConfirmation: boolean;
 }
 
 class SceneContentLogic {
@@ -179,6 +181,7 @@ class SceneContentLogic {
       showHeadTrackingAlignment: false,
       alignmentState: 'idle',
       alignmentARModeRequested: false,
+      waitingForAlignmentConfirmation: false,
       showTexturePanel: false,
       textureOptions: [],
       selectedFurnitureTextureId: undefined,
@@ -1190,11 +1193,12 @@ class SceneContentLogic {
                 alignmentStatus: "aligned",
                 showHeadTrackingAlignment: false,
                 showCornerSelection: false,
-                showInstructions: true,
+                showInstructions: false,
                 showSidebar: true,
                 showAlignmentConfirm: true,
                 alignmentARModeRequested: false,
                 homeTransparent: false,
+                waitingForAlignmentConfirmation: true,
               });
               
               this.showNotificationMessage(
@@ -2367,6 +2371,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     showHeadTrackingAlignment: false,
     alignmentState: 'idle',
     alignmentARModeRequested: false,
+    waitingForAlignmentConfirmation: false,
   });
 
   const logicRef = useRef<SceneContentLogic | null>(null);
@@ -2479,7 +2484,8 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     state.showScalePanel ||
     state.showPreciseCheckPanel ||
     state.showAlignmentPanel ||
-    state.showAlignmentConfirm;
+    state.showAlignmentConfirm ||
+    state.waitingForAlignmentConfirmation;
 
   if (state.loading) {
     return (
@@ -2631,13 +2637,13 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
         />
       </HeadLockedUI>
 
-      <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showAlignmentConfirm}>
+      {/* <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showAlignmentConfirm}>
         <VRAlignmentConfirmPanel 
           show={state.showAlignmentConfirm} 
           onConfirm={() => logic.handleAlignmentConfirm()} 
           onCancel={() => logic.handleAlignmentCancel()} 
         />
-      </HeadLockedUI>
+      </HeadLockedUI> */}
 
       <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showInstructions}>
         <VRInstructionPanel 
@@ -2687,12 +2693,23 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           show={state.showNotification}
           message={state.notificationMessage}
           type={state.notificationType}
-          onClose={() =>
-            logic.updateState({
+          showCancel={state.waitingForAlignmentConfirmation}
+          onCancel={() => {
+            // Future implementation - cancel button does nothing for now
+          }}
+          onClose={() => {
+            const update: Partial<SceneState> = {
               showNotification: false,
               notificationFromControlPanel: false,
-            })
-          }
+            };
+            
+            if (state.waitingForAlignmentConfirmation) {
+              update.waitingForAlignmentConfirmation = false;
+              update.showInstructions = true;
+            }
+            
+            logic.updateState(update);
+          }}
         />
       </HeadLockedUI>
       <HeadLockedUI
