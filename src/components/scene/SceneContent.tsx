@@ -101,6 +101,7 @@ interface SceneState {
   selectedFloorId: string | undefined;
   selectedWallId: string | undefined;
   loadingEnvironment: boolean;
+  experienceMode: boolean;
 }
 
 class SceneContentLogic {
@@ -177,6 +178,7 @@ class SceneContentLogic {
       selectedFloorId: undefined,
       selectedWallId: undefined,
       loadingEnvironment: false,
+      experienceMode: false,
     };
   }
 
@@ -913,9 +915,9 @@ class SceneContentLogic {
   }
 
   handleToggleUI(): void {
-    const { showMoveCloserPanel, showPreciseCheckPanel, showControlPanel, showInstructions, showFurniture, selectedItemId } = this.state;
+    const { showMoveCloserPanel, showPreciseCheckPanel, showControlPanel, showInstructions, showFurniture, selectedItemId, experienceMode } = this.state;
 
-    if (showMoveCloserPanel || showPreciseCheckPanel) return;
+    if (showMoveCloserPanel || showPreciseCheckPanel || experienceMode) return;
 
     if (showControlPanel) {
       this.updateState({ showControlPanel: false });
@@ -1011,6 +1013,40 @@ class SceneContentLogic {
     this.updateState({ homeTransparent: newTransparent });
   }
 
+  handleToggleExperienceMode(): void {
+    const newExperienceMode = !this.state.experienceMode;
+    
+    if (this.furnitureController) {
+      this.furnitureController.setEnabled(!newExperienceMode);
+    }
+
+    if (newExperienceMode) {
+      if (this.state.selectedItemId) {
+        this.sceneManager?.deselectFurniture(this.state.selectedItemId);
+        this.furnitureController?.setSelectedFurniture(null);
+      }
+      this.updateState({
+        experienceMode: newExperienceMode,
+        selectedItemId: null,
+        showSlider: false,
+        showTransformGizmo: false,
+        gizmoPosition: null,
+        showRotationGizmo: false,
+        rotationGizmoPosition: null,
+        showScalePanel: false,
+        showTexturePanel: false,
+        showFurniture: false,
+        showSidebar: false,
+        sidebarActiveItem: null,
+      });
+    } else {
+      this.updateState({
+        experienceMode: newExperienceMode,
+        showSidebar: true,
+      });
+    }
+  }
+
   handleToggleControlPanel(): void {
     const { showMoveCloserPanel, showPreciseCheckPanel, showControlPanel } =
       this.state;
@@ -1037,6 +1073,7 @@ class SceneContentLogic {
   }
 
   handleSidebarItemSelect(itemId: string): void {
+    if (this.state.experienceMode) return;
     this.updateState({ sidebarActiveItem: itemId });
 
     switch (itemId) {
@@ -1476,7 +1513,7 @@ class SceneContentLogic {
   }
 
   handleSelectFurniture(f: any, camera: THREE.Camera): void {
-    if (!this.sceneManager || this.state.alignmentStatus !== "aligned") return;
+    if (!this.sceneManager || this.state.alignmentStatus !== "aligned" || this.state.experienceMode) return;
 
     const catalogId = f.id;
     const allFurniture = this.sceneManager.getAllFurniture();
@@ -1546,7 +1583,7 @@ class SceneContentLogic {
   }
 
   handleSelectItem(id: string): void {
-    if (!this.sceneManager) {
+    if (!this.sceneManager || this.state.experienceMode) {
       return;
     }
 
@@ -1631,8 +1668,6 @@ class SceneContentLogic {
           });
         });
       }
-    } else {
-      console.log("[handleSelectItem] ❌ Furniture not found:", id);
     }
   }
 
@@ -1845,6 +1880,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     showAlignmentPanel: true,
     showAlignmentConfirm: false,
     homeTransparent: false,
+    experienceMode: false,
   });
 
   const logicRef = useRef<SceneContentLogic | null>(null);
@@ -1977,7 +2013,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
                   return;
                 }
 
-                if (state.alignmentStatus === "aligned" && !state.navigationMode && !uiLocked) {
+                if (state.alignmentStatus === "aligned" && !state.navigationMode && !uiLocked && !state.experienceMode) {
                   e.stopPropagation();
                   logic.handleSelectItem(furniture.getId());
                 }
@@ -2012,7 +2048,9 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       
       {state.alignmentStatus === "aligned" && (
         <>
-          <CatalogToggle onToggle={() => logic.handleToggleUI()} />
+          {!state.experienceMode && (
+            <CatalogToggle onToggle={() => logic.handleToggleUI()} />
+          )}
           <ControlPanelToggle onToggle={() => logic.handleToggleControlPanel()} />
         </>
       )}
@@ -2041,10 +2079,10 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       <HeadLockedUI
         distance={1.7}
         verticalOffset={0}
-        enabled={state.showFurniture}
+        enabled={state.showFurniture && !state.experienceMode}
       >
         <VRFurniturePanel
-          show={state.showFurniture}
+          show={state.showFurniture && !state.experienceMode}
           catalog={state.furnitureCatalog}
           loading={state.catalogLoading}
           onSelectItem={(f) => logic.handleSelectFurniture(f, camera)}
@@ -2069,6 +2107,8 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           onToggleAlignment={() => logic.handleToggleAlignmentMode()}
           homeTransparent={state.homeTransparent}
           onToggleTransparency={() => logic.handleToggleHomeTransparency()}
+          experienceMode={state.experienceMode}
+          onToggleExperienceMode={() => logic.handleToggleExperienceMode()}
         />
       </HeadLockedUI>
       <HeadLockedUI
@@ -2134,11 +2174,11 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       <HeadLockedUI
         distance={1.4}
         verticalOffset={0}
-        enabled={state.showSidebar}
+        enabled={state.showSidebar && !state.experienceMode}
       >
         <group position={[-0.8, 0, 0]}>
           <VRSidebar
-            show={state.showSidebar}
+            show={state.showSidebar && !state.experienceMode}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
           />
         </group>
