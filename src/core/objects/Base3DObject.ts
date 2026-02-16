@@ -7,26 +7,32 @@ export interface Transform {
 }
 
 export abstract class Base3DObject {
-  protected id: string;
-  protected name: string;
+  public id: string;
+  public name: string;
   protected modelId: number;
   protected modelPath: string | null;
   protected transform: Transform;
   protected group: THREE.Group;
   protected modelGroup: THREE.Group;
+  public type: string;
+  public image: string;
+ 
 
   constructor(
     id: string,
     name: string,
     modelId: number,
     modelPath: string | null,
-    initialTransform: Partial<Transform> = {}
+    initialTransform: Partial<Transform> = {},
+    type: string = '',
+    image: string = ''
   ) {
     this.id = id;
     this.name = name;
     this.modelId = modelId;
     this.modelPath = modelPath;
-    
+    this.type = type;           // ← Add this
+    this.image = image;
     this.transform = {
       position: initialTransform.position || [0, 0, 0],
       rotation: initialTransform.rotation || [0, 0, 0],

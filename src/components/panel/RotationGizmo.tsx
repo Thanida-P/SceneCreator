@@ -50,7 +50,7 @@ function RotationArc({ axis, color, position, rotation, radius, onAxisDrag }: Ro
   }, [axis]);
 
   const handlePointerDown = (e: any) => {
-    console.log(`[RotationArc-${axis}] ⬇️ POINTER DOWN at:`, e.point);
+   
     e.stopPropagation();
     
     setDragging(true);
@@ -92,7 +92,7 @@ function RotationArc({ axis, color, position, rotation, radius, onAxisDrag }: Ro
       dragPlane.current = new THREE.Plane(planeNormal, 0);
       dragPlane.current.setFromNormalAndCoplanarPoint(planeNormal, groupWorldPos);
       
-      console.log(`[RotationArc-${axis}] Initial angle: ${(dragStartAngle.current * 180 / Math.PI).toFixed(1)}°`);
+    
     }
     
 
@@ -126,7 +126,7 @@ function RotationArc({ axis, color, position, rotation, radius, onAxisDrag }: Ro
       while (deltaAngle < -Math.PI) deltaAngle += Math.PI * 2;
       
       if (Math.abs(deltaAngle) > 0.001) {
-        console.log(`[RotationArc-${axis}] 🔄 ROTATE - ${(deltaAngle * 180 / Math.PI).toFixed(2)}°`);
+       
         dragStartAngle.current = currentAngle;
         onAxisDrag(axis, deltaAngle);
       }
@@ -135,7 +135,7 @@ function RotationArc({ axis, color, position, rotation, radius, onAxisDrag }: Ro
 
   const handlePointerUp = (e: any) => {
     if (!dragging) return;
-    console.log(`[RotationArc-${axis}] ⬆️ POINTER UP`);
+    
     e.stopPropagation();
     
     setDragging(false);
@@ -155,7 +155,7 @@ function RotationArc({ axis, color, position, rotation, radius, onAxisDrag }: Ro
 
   const handlePointerEnter = (e: any) => {
     if (dragging) return;
-    console.log(`[RotationArc-${axis}] 👆 HOVER ON`);
+   
     e.stopPropagation();
     setHovered(true);
     document.body.style.cursor = 'grab';
@@ -163,7 +163,7 @@ function RotationArc({ axis, color, position, rotation, radius, onAxisDrag }: Ro
 
   const handlePointerLeave = (e: any) => {
     if (dragging) return;
-    console.log(`[RotationArc-${axis}] 👋 HOVER OFF`);
+  
     e.stopPropagation();
     setHovered(false);
     document.body.style.cursor = 'auto';
@@ -280,7 +280,7 @@ export function RotationGizmo({
         rotation={[0, 0, Math.PI / 2]}
         radius={arcRadius}
         onAxisDrag={(axis, deltaRadians) => {
-          console.log(`[RotationGizmo] 🔴 X Rotate: ${(deltaRadians * 180 / Math.PI).toFixed(1)}°`);
+         
           onRotate(axis, deltaRadians);
         }}
       />
@@ -293,7 +293,7 @@ export function RotationGizmo({
         rotation={[Math.PI / 2, 0, 0]}
         radius={arcRadius}
         onAxisDrag={(axis, deltaRadians) => {
-          console.log(`[RotationGizmo] 🟢 Y Rotate: ${(deltaRadians * 180 / Math.PI).toFixed(1)}°`);
+         
           onRotate(axis, deltaRadians);
         }}
       />
@@ -306,7 +306,7 @@ export function RotationGizmo({
         rotation={[0, 0, 0]}
         radius={arcRadius}
         onAxisDrag={(axis, deltaRadians) => {
-          console.log(`[RotationGizmo] 🔵 Z Rotate: ${(deltaRadians * 180 / Math.PI).toFixed(1)}°`);
+          
           onRotate(axis, deltaRadians);
         }}
       />
