@@ -132,6 +132,7 @@ interface SceneState {
   showMoveCloserPanel: boolean;
   showPreciseCheckPanel: boolean;
   preciseCheckInProgress: boolean;
+  awaitingCollisionAck: boolean;
   saving: boolean;
   loading: boolean;
   navigationMode: boolean;
@@ -227,6 +228,7 @@ class SceneContentLogic {
       showMoveCloserPanel: false,
       showPreciseCheckPanel: false,
       preciseCheckInProgress: false,
+      awaitingCollisionAck: false,
       saving: false,
       loading: true,
       navigationMode: false,
@@ -1849,6 +1851,7 @@ class SceneContentLogic {
     delta: THREE.Vector3,
   ): Promise<void> {
     if (!this.sceneManager) return;
+    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
 
     const furniture = this.sceneManager.getFurniture(id);
     if (!furniture) return;
@@ -2028,7 +2031,7 @@ class SceneContentLogic {
         "error",
       );
     } finally {
-      this.updateState({ preciseCheckInProgress: false });
+      this.updateState({ preciseCheckInProgress: false, awaitingCollisionAck: true });
     }
   }
 
@@ -2342,6 +2345,7 @@ class SceneContentLogic {
       });
       return;
     }
+    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
 
     const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
     if (!furniture) {
@@ -2392,6 +2396,7 @@ class SceneContentLogic {
       });
       return;
     }
+    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
 
     const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
     if (!furniture) {
@@ -2428,15 +2433,17 @@ class SceneContentLogic {
 }
 
   handleScaleChange(newScale: number): void {
+  if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
   const clampedScale = Math.max(0.5, Math.min(3, newScale));
   this.updateState({ sliderValue: clampedScale });
-  
+
   if (this.state.selectedItemId && this.sceneManager) {
     this.sceneManager.scaleFurniture(this.state.selectedItemId, clampedScale);
   }
 }
 
   handleRotationSliderChange(newRotation: number): void {
+    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
     this.updateState({ rotationValue: newRotation });
     if (this.state.selectedItemId && this.sceneManager) {
       const furniture = this.sceneManager.getFurniture(
@@ -2697,6 +2704,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     showMoveCloserPanel: false,
     showPreciseCheckPanel: false,
     preciseCheckInProgress: false,
+    awaitingCollisionAck: false,
     saving: false,
     loading: true,
     navigationMode: false,
@@ -3104,6 +3112,9 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
               showNotification: false,
               notificationFromControlPanel: false,
             };
+            if (state.awaitingCollisionAck) {
+              update.awaitingCollisionAck = false;
+            }
             if (state.waitingForAlignmentConfirmation) {
               update.waitingForAlignmentConfirmation = false;
               update.showInstructions = true;
