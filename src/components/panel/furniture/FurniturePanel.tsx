@@ -24,6 +24,7 @@ const BACKEND_CATEGORY_MAP: Record<string, FurnitureCategory> = {
   "Office Room": "office-room",
   "Kitchen": "kitchen",
   "Widgets": "widgets",
+  "widget": "widgets",
   "living-room": "living-room",
   "bedroom": "bedroom",
   "office-room": "office-room",
@@ -95,11 +96,8 @@ export function VRFurniturePanel({
 
 
   const filteredCatalog = React.useMemo(() => {
-    if (selectedCategory === "widgets") {
-      return SYSTEM_WIDGETS;
-    }
     if (selectedCategory === "all") {
-      return [...catalog, ...SYSTEM_WIDGETS];
+      return catalog;
     }
     return catalog.filter((item: any) => {
       let itemCategory: FurnitureCategory = "all";
