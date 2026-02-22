@@ -7,6 +7,9 @@ interface VRNotificationPanelProps {
   message: string;
   type?: "success" | "error" | "info";
   onClose: () => void;
+  showCancel?: boolean;
+  cancelText?: string;
+  onCancel?: () => void;
 }
 
 export function VRNotificationPanel({
@@ -14,8 +17,11 @@ export function VRNotificationPanel({
   message,
   type = "info",
   onClose,
+  showCancel = false,
+  cancelText = "Cancel",
+  onCancel,
 }: VRNotificationPanelProps) {
-  const [hoveredButton, setHoveredButton] = React.useState(false);
+  const [hoveredButton, setHoveredButton] = React.useState<string | null>(null);
 
   if (!show) return null;
 
@@ -102,54 +108,161 @@ export function VRNotificationPanel({
         {message}
       </Text>
 
-      {/* OK Button */}
-      <group
-        position={[0, -0.15, 0.01]}
-        onPointerEnter={(e) => {
-          e.stopPropagation();
-          setHoveredButton(true);
-        }}
-        onPointerLeave={(e) => {
-          e.stopPropagation();
-          setHoveredButton(false);
-        }}
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          onClose();
-        }}
-      >
-        <mesh>
-          <RoundedPlane width={0.25} height={0.1} radius={0.03} />
-          <meshStandardMaterial
-            color={hoveredButton ? "#66B9E2" : "#3FA4CE"}
-            emissive={"#3FA4CE"}
-            emissiveIntensity={hoveredButton ? 0.5 : 0.3}
-          />
-        </mesh>
-        <Text
-          position={[0, 0, 0.01]}
-          fontSize={0.045}
-          color="#334155"
-          anchorX="center"
-          anchorY="middle"
-          fontWeight="semi-bold"
-        >
-          OK
-        </Text>
-      </group>
+      {/* Buttons */}
+      {showCancel ? (
+        <>
+          {/* OK Button */}
+          <group
+            position={[-0.15, -0.15, 0.01]}
+            onPointerEnter={(e) => {
+              e.stopPropagation();
+              setHoveredButton("ok");
+            }}
+            onPointerLeave={(e) => {
+              e.stopPropagation();
+              setHoveredButton(null);
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+          >
+            <mesh>
+              <RoundedPlane width={0.25} height={0.1} radius={0.03} />
+              <meshStandardMaterial
+                color={hoveredButton === "ok" ? "#66B9E2" : "#3FA4CE"}
+                emissive={"#3FA4CE"}
+                emissiveIntensity={hoveredButton === "ok" ? 0.5 : 0.3}
+              />
+            </mesh>
+            <Text
+              position={[0, 0, 0.01]}
+              fontSize={0.045}
+              color="#334155"
+              anchorX="center"
+              anchorY="middle"
+              fontWeight="semi-bold"
+            >
+              OK
+            </Text>
+          </group>
 
-      {/* Button shadow */}
-      <group position={[0, -0.16, 0]}>
-        <mesh>
-          <RoundedPlane width={0.25} height={0.1} radius={0.03} />
-          <meshStandardMaterial
-            color="#000000"
-            opacity={0.15}
-            transparent
-            roughness={1.0}
-          />
-        </mesh>
-      </group>
+          {/* OK Button shadow */}
+          <group position={[-0.15, -0.16, 0]}>
+            <mesh>
+              <RoundedPlane width={0.25} height={0.1} radius={0.03} />
+              <meshStandardMaterial
+                color="#000000"
+                opacity={0.15}
+                transparent
+                roughness={1.0}
+              />
+            </mesh>
+          </group>
+
+          {/* Cancel Button */}
+          <group
+            position={[0.17, -0.15, 0.01]}
+            onPointerEnter={(e) => {
+              e.stopPropagation();
+              setHoveredButton("cancel");
+            }}
+            onPointerLeave={(e) => {
+              e.stopPropagation();
+              setHoveredButton(null);
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              if (onCancel) {
+                onCancel();
+              }
+            }}
+          >
+            <mesh>
+              <RoundedPlane width={0.35} height={0.1} radius={0.03} />
+              <meshStandardMaterial
+                color={hoveredButton === "cancel" ? "#EF4444" : "#DC2626"}
+                emissive={"#DC2626"}
+                emissiveIntensity={hoveredButton === "cancel" ? 0.5 : 0.3}
+              />
+            </mesh>
+            <Text
+              position={[0, 0, 0.01]}
+              fontSize={0.045}
+              color="#FFFFFF"
+              anchorX="center"
+              anchorY="middle"
+              fontWeight="semi-bold"
+            >
+              {cancelText}
+            </Text>
+          </group>
+
+          {/* Cancel Button shadow */}
+          <group position={[0.15, -0.16, 0]}>
+            <mesh>
+              <RoundedPlane width={0.25} height={0.1} radius={0.03} />
+              <meshStandardMaterial
+                color="#000000"
+                opacity={0.15}
+                transparent
+                roughness={1.0}
+              />
+            </mesh>
+          </group>
+        </>
+      ) : (
+        <>
+          {/* OK Button */}
+          <group
+            position={[0, -0.15, 0.01]}
+            onPointerEnter={(e) => {
+              e.stopPropagation();
+              setHoveredButton("ok");
+            }}
+            onPointerLeave={(e) => {
+              e.stopPropagation();
+              setHoveredButton(null);
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+          >
+            <mesh>
+              <RoundedPlane width={0.25} height={0.1} radius={0.03} />
+              <meshStandardMaterial
+                color={hoveredButton === "ok" ? "#66B9E2" : "#3FA4CE"}
+                emissive={"#3FA4CE"}
+                emissiveIntensity={hoveredButton === "ok" ? 0.5 : 0.3}
+              />
+            </mesh>
+            <Text
+              position={[0, 0, 0.01]}
+              fontSize={0.045}
+              color="#334155"
+              anchorX="center"
+              anchorY="middle"
+              fontWeight="semi-bold"
+            >
+              OK
+            </Text>
+          </group>
+
+          {/* Button shadow */}
+          <group position={[0, -0.16, 0]}>
+            <mesh>
+              <RoundedPlane width={0.25} height={0.1} radius={0.03} />
+              <meshStandardMaterial
+                color="#000000"
+                opacity={0.15}
+                transparent
+                roughness={1.0}
+              />
+            </mesh>
+          </group>
+        </>
+      )}
     </group>
   );
 }

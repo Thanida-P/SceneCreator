@@ -163,154 +163,155 @@ export function VRAlignmentPanel({ show, onSelectMode }: VRAlignmentPanelProps) 
   );
 }
 
-interface VRAlignmentConfirmPanelProps {
-  show: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-}
+// interface VRAlignmentConfirmPanelProps {
+//   show: boolean;
+//   onConfirm: () => void;
+//   onCancel: () => void;
+// }
 
-export function VRAlignmentConfirmPanel({ show, onConfirm, onCancel }: VRAlignmentConfirmPanelProps) {
-  const [hoveredButton, setHoveredButton] = useState<string | null>(null);
+// Legacy Alignment Confirmation UI 
+// export function VRAlignmentConfirmPanel({ show, onConfirm, onCancel }: VRAlignmentConfirmPanelProps) {
+//   const [hoveredButton, setHoveredButton] = useState<string | null>(null);
 
-  if (!show) return null;
+//   if (!show) return null;
 
-  const panelWidth = 0.7;
-  const panelHeight = 0.5;
-  const buttonWidth = 0.25;
-  const buttonHeight = 0.1;
+//   const panelWidth = 0.7;
+//   const panelHeight = 0.5;
+//   const buttonWidth = 0.25;
+//   const buttonHeight = 0.1;
 
-  return (
-    <group>
-      {/* Main background panel */}
-      <mesh position={[0, 0, -0.02]}>
-        <GradientBackground width={panelWidth} height={panelHeight} radius={0.1} color1="#EAF4FA" color2="#F0F2F5" opacity={0.85} />
-      </mesh>
+//   return (
+//     <group>
+//       {/* Main background panel */}
+//       <mesh position={[0, 0, -0.02]}>
+//         <GradientBackground width={panelWidth} height={panelHeight} radius={0.1} color1="#EAF4FA" color2="#F0F2F5" opacity={0.85} />
+//       </mesh>
 
-      {/* Background Shadow */}
-      <mesh position={[0, 0, -0.03]}>
-        <RoundedPlane width={panelWidth} height={panelHeight} radius={0.1} />
-        <meshStandardMaterial
-          color="#000000"
-          opacity={0.15}
-          transparent
-          roughness={1.0}
-        />
-      </mesh>
+//       {/* Background Shadow */}
+//       <mesh position={[0, 0, -0.03]}>
+//         <RoundedPlane width={panelWidth} height={panelHeight} radius={0.1} />
+//         <meshStandardMaterial
+//           color="#000000"
+//           opacity={0.15}
+//           transparent
+//           roughness={1.0}
+//         />
+//       </mesh>
 
-      {/* Header */}
-      <Text
-        position={[0, panelHeight / 2 - 0.12, 0.01]}
-        fontSize={0.05}
-        color="#334155"
-        anchorX="center"
-        anchorY="middle"
-        fontWeight="bold"
-      >
-        Confirm Alignment
-      </Text>
+//       {/* Header */}
+//       <Text
+//         position={[0, panelHeight / 2 - 0.12, 0.01]}
+//         fontSize={0.05}
+//         color="#334155"
+//         anchorX="center"
+//         anchorY="middle"
+//         fontWeight="bold"
+//       >
+//         Confirm Alignment
+//       </Text>
 
-      {/* Description */}
-      <Text
-        position={[0, 0.05, 0.01]}
-        fontSize={0.032}
-        color="#64748B"
-        anchorX="center"
-        anchorY="middle"
-      >
-        Adjust the model position using
-      </Text>
-      <Text
-        position={[0, 0, 0.01]}
-        fontSize={0.032}
-        color="#64748B"
-        anchorX="center"
-        anchorY="middle"
-      >
-        your controllers, then confirm
-      </Text>
+//       {/* Description */}
+//       <Text
+//         position={[0, 0.05, 0.01]}
+//         fontSize={0.032}
+//         color="#64748B"
+//         anchorX="center"
+//         anchorY="middle"
+//       >
+//         Adjust the model position using
+//       </Text>
+//       <Text
+//         position={[0, 0, 0.01]}
+//         fontSize={0.032}
+//         color="#64748B"
+//         anchorX="center"
+//         anchorY="middle"
+//       >
+//         your controllers, then confirm
+//       </Text>
 
-      {/* Confirm Button */}
-      <group position={[-0.15, -0.15, 0.01]}>
-        <mesh
-          onPointerEnter={(e) => {
-            e.stopPropagation();
-            setHoveredButton("confirm");
-          }}
-          onPointerLeave={(e) => {
-            e.stopPropagation();
-            setHoveredButton(null);
-          }}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            onConfirm();
-          }}
-        >
-          <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
-          <meshStandardMaterial
-            color={hoveredButton === "confirm" ? "#4CAF50" : "#66BB6A"}
-            emissive={hoveredButton === "confirm" ? "#66BB6A" : "#66BB6A"}
-            emissiveIntensity={hoveredButton === "confirm" ? 0.5 : 0.3}
-          />
-        </mesh>
-        <Text
-          position={[0, 0, 0.01]}
-          fontSize={0.04}
-          color="#FFFFFF"
-          anchorX="center"
-          anchorY="middle"
-          fontWeight={550}
-        >
-          Confirm
-        </Text>
-      </group>
+//       {/* Confirm Button */}
+//       <group position={[-0.15, -0.15, 0.01]}>
+//         <mesh
+//           onPointerEnter={(e) => {
+//             e.stopPropagation();
+//             setHoveredButton("confirm");
+//           }}
+//           onPointerLeave={(e) => {
+//             e.stopPropagation();
+//             setHoveredButton(null);
+//           }}
+//           onPointerDown={(e) => {
+//             e.stopPropagation();
+//             onConfirm();
+//           }}
+//         >
+//           <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
+//           <meshStandardMaterial
+//             color={hoveredButton === "confirm" ? "#4CAF50" : "#66BB6A"}
+//             emissive={hoveredButton === "confirm" ? "#66BB6A" : "#66BB6A"}
+//             emissiveIntensity={hoveredButton === "confirm" ? 0.5 : 0.3}
+//           />
+//         </mesh>
+//         <Text
+//           position={[0, 0, 0.01]}
+//           fontSize={0.04}
+//           color="#FFFFFF"
+//           anchorX="center"
+//           anchorY="middle"
+//           fontWeight={550}
+//         >
+//           Confirm
+//         </Text>
+//       </group>
 
-      <group position={[-0.15, -0.16, 0]}>
-        <mesh>
-          <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
-        </mesh>
-      </group>
+//       <group position={[-0.15, -0.16, 0]}>
+//         <mesh>
+//           <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
+//         </mesh>
+//       </group>
 
-      {/* Cancel Button */}
-      <group position={[0.15, -0.15, 0.01]}>
-        <mesh
-          onPointerEnter={(e) => {
-            e.stopPropagation();
-            setHoveredButton("cancel");
-          }}
-          onPointerLeave={(e) => {
-            e.stopPropagation();
-            setHoveredButton(null);
-          }}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            onCancel();
-          }}
-        >
-          <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
-          <meshStandardMaterial
-            color={hoveredButton === "cancel" ? "#A5D1E7" : "#66B9E2"}
-            emissive={hoveredButton === "cancel" ? "#66B9E2" : "#66B9E2"}
-            emissiveIntensity={hoveredButton === "cancel" ? 0.5 : 0.3}
-          />
-        </mesh>
-        <Text
-          position={[0, 0, 0.01]}
-          fontSize={0.04}
-          color="#334155"
-          anchorX="center"
-          anchorY="middle"
-          fontWeight={550}
-        >
-          Cancel
-        </Text>
-      </group>
+//       {/* Cancel Button */}
+//       <group position={[0.15, -0.15, 0.01]}>
+//         <mesh
+//           onPointerEnter={(e) => {
+//             e.stopPropagation();
+//             setHoveredButton("cancel");
+//           }}
+//           onPointerLeave={(e) => {
+//             e.stopPropagation();
+//             setHoveredButton(null);
+//           }}
+//           onPointerDown={(e) => {
+//             e.stopPropagation();
+//             onCancel();
+//           }}
+//         >
+//           <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
+//           <meshStandardMaterial
+//             color={hoveredButton === "cancel" ? "#A5D1E7" : "#66B9E2"}
+//             emissive={hoveredButton === "cancel" ? "#66B9E2" : "#66B9E2"}
+//             emissiveIntensity={hoveredButton === "cancel" ? 0.5 : 0.3}
+//           />
+//         </mesh>
+//         <Text
+//           position={[0, 0, 0.01]}
+//           fontSize={0.04}
+//           color="#334155"
+//           anchorX="center"
+//           anchorY="middle"
+//           fontWeight={550}
+//         >
+//           Cancel
+//         </Text>
+//       </group>
 
-      <group position={[0.15, -0.16, 0]}>
-        <mesh>
-          <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
-        </mesh>
-      </group>
-    </group>
-  );
-}
+//       <group position={[0.15, -0.16, 0]}>
+//         <mesh>
+//           <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
+//         </mesh>
+//       </group>
+//     </group>
+//   );
+// }
 

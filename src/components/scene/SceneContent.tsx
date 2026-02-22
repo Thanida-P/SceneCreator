@@ -30,17 +30,15 @@ import {
 } from "../../core/controllers/XRControllerBase";
 import { makeAuthenticatedRequest, logout } from "../../utils/Auth";
 import { VRSidebar } from "../panel/VRSidebar";
-import { VRAlignmentPanel, VRAlignmentConfirmPanel } from "../panel/VRAlignmentPanel";
+// import { VRAlignmentPanel, VRAlignmentConfirmPanel } from "../panel/VRAlignmentPanel";
+import { VRAlignmentPanel } from "../panel/VRAlignmentPanel";
 import { TransformGizmo } from "../panel/TransformGizmo";
 import { RotationGizmo } from "../panel/RotationGizmo";
-import {
-  TextureSelectorPanel,
-  TextureOption,
-} from "../panel/texture/TextureSelectorPanel";
-import {
-  EnvironmentSelectorPanel,
-  EnvironmentOption,
-} from "../panel/texture/EnvironmentSelectorPanel";
+import { CornerSelectionVisualization } from "../panel/CornerSelectionVisualization";
+import { AlignmentLineVisualization } from "../panel/AlignmentLineVisualization";
+import { ARSessionHandler } from "./ARSessionHandler";
+import { TextureSelectorPanel, TextureOption } from "../panel/texture/TextureSelectorPanel";
+import { EnvironmentSelectorPanel, EnvironmentOption } from "../panel/texture/EnvironmentSelectorPanel";
 
 const DIGITAL_HOME_PLATFORM_BASE_URL = import.meta.env
   .VITE_DIGITAL_HOME_PLATFORM_URL;
@@ -155,6 +153,12 @@ interface SceneState {
   experienceMode: boolean;
   experienceWhiteboardId: string | null;
   whiteboardTool: WhiteboardTool;
+  showCornerSelection: boolean;
+  showHeadTrackingAlignment: boolean;
+  alignmentState: 'idle' | 'selectingCorner' | 'aligningFirstCorner' | 'aligningSecondCorner' | 'aligningThirdCorner' | 'aligningFourthCorner' | 'completed';
+  alignmentARModeRequested: boolean;
+  waitingForAlignmentConfirmation: boolean;
+  legacyManualAlignment: boolean;
 }
 
 class SceneContentLogic {
@@ -176,6 +180,12 @@ class SceneContentLogic {
   public pendingMove: [number, number, number] | null = null;
   public currentAABBPosition: [number, number, number] | null = null;
   public modelUrlCache: Map<number, string> = new Map();
+  private prevTriggerState: Map<string, boolean> = new Map();
+  private xrStore: any = null;
+  private isRequestingAR: boolean = false;
+  private cornerSelectionReady: boolean = false;
+  private alignmentReady: boolean = false;
+  private initialXRMode: 'vr' | 'ar' | null = null;
 
   private textureCache: Map<string, TextureOption[]> = new Map();
   private textureLoadingCache: Map<string, Promise<void>> = new Map();
@@ -226,6 +236,12 @@ class SceneContentLogic {
       showAlignmentPanel: true,
       showAlignmentConfirm: false,
       homeTransparent: false,
+      showCornerSelection: false,
+      showHeadTrackingAlignment: false,
+      alignmentState: 'idle',
+      alignmentARModeRequested: false,
+      waitingForAlignmentConfirmation: false,
+      legacyManualAlignment: false,
       showTexturePanel: false,
       textureOptions: [],
       selectedFurnitureTextureId: undefined,
@@ -310,6 +326,101 @@ class SceneContentLogic {
       rig.add(camera);
     }
     this.navigationController.setRig(rig);
+  }
+
+  setXRStore(xrStore: any): void {
+    this.xrStore = xrStore;
+  }
+
+  async requestARMode(): Promise<void> {
+    if (this.isRequestingAR) {
+      return;
+    }
+
+    if (!this.xrStore) {
+      console.warn('XR store not available');
+      return;
+    }
+
+    this.isRequestingAR = true;
+
+    try {
+      if (!navigator.xr || !(navigator.xr as any).isSessionSupported) {
+        console.warn('XR not available');
+        this.isRequestingAR = false;
+        return;
+      }
+
+      const isARSupported = await (navigator.xr as any).isSessionSupported('immersive-ar');
+      if (!isARSupported) {
+        console.warn('AR not supported');
+        this.isRequestingAR = false;
+        return;
+      }
+
+      const currentSession = this.xrStore.getState().session;
+      
+      if (currentSession && (currentSession as any).mode === 'immersive-ar') {
+        this.isRequestingAR = false;
+        return;
+      }
+
+      let gl = this.xrStore.getState().gl;
+      let retries = 0;
+      const maxRetries = 30;
+      
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      while ((!gl || !gl.xr) && retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        gl = this.xrStore.getState().gl;
+        retries++;
+        if (gl && gl.xr) {
+          break;
+        }
+      }
+
+      if (!gl || !gl.xr) {
+        console.error('Renderer not available after waiting', {
+          hasGl: !!gl,
+          hasXr: !!(gl && gl.xr),
+          retries
+        });
+        this.isRequestingAR = false;
+        return;
+      }
+
+      if (currentSession && (currentSession as any).mode !== 'immersive-ar') {
+        try {
+          if (!currentSession.ended) {
+            await currentSession.end();
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        } catch (err) {
+          console.warn('Error ending previous session:', err);
+        }
+      }
+
+      const arSession = await (navigator.xr as any).requestSession('immersive-ar', {
+        requiredFeatures: ['local-floor'],
+        optionalFeatures: ['bounded-floor', 'hand-tracking', 'layers']
+      });
+
+      if (gl && gl.xr) {
+        await gl.xr.setSession(arSession);
+        this.xrStore.setState({ session: arSession });
+      } else {
+        console.error('Renderer lost during session request');
+        await arSession.end();
+      }
+    } catch (err) {
+      console.error('Failed to request AR mode:', err);
+      if (err instanceof Error && err.message.includes('cancelled')) {
+        console.warn('AR session request was cancelled (likely called multiple times)');
+      }
+    } finally {
+      this.isRequestingAR = false;
+    }
   }
 
   cleanup(): void {
@@ -991,20 +1102,212 @@ class SceneContentLogic {
       this.updateState({ showFurniture: true, showSlider: false });
     }
   }
-
+  
   handleAlignmentModeSelect(mode: "world" | "free"): void {
     if (mode === "world") {
-      if (this.state.homeTransparent) {
-        this.sceneManager?.getHomeModel()?.setOpacity(0.3);
+      // model in VR mode
+      const homeModel = this.sceneManager?.getHomeModel();
+      if (homeModel) {
+        homeModel.setOpacity(1.0);
+        homeModel.setVisible(true);
       }
-      this.updateState({
-        alignmentMode: "world",
-        alignmentStatus: "aligning",
-        showAlignmentPanel: false,
-        showAlignmentConfirm: true,
-      });
+      
+      // Initialize automatic alignment
+      if (this.navigationController && homeModel) {
+        const modelGroup = homeModel.getGroup();
+        if (!modelGroup) {
+          console.error('Model group not available');
+          return;
+        }
+
+        this.navigationController.setHomeModelGroup(modelGroup);
+        const boundingBox = new THREE.Box3().setFromObject(modelGroup);
+        if (boundingBox.isEmpty()) {
+          console.warn('Bounding box is empty, waiting for model to load...');
+          setTimeout(() => {
+            const retryBox = new THREE.Box3().setFromObject(modelGroup);
+            if (!retryBox.isEmpty()) {
+              this.navigationController?.setBoundingBox(retryBox);
+            }
+          }, 500);
+        } else {
+          this.navigationController.setBoundingBox(boundingBox);
+        }
+
+        this.navigationController.setAlignmentCallbacks(
+          (state, data) => {
+            this.updateState({ alignmentState: state });
+
+            if (state === 'selectingCorner') {
+              if (homeModel) {
+                homeModel.setVisible(true);
+                homeModel.setOpacity(1.0);
+                homeModel.setTransparent(false);
+              }
+              this.cornerSelectionReady = false;
+              this.updateState({
+                showCornerSelection: true,
+                showHeadTrackingAlignment: false,
+                showControlPanel: false,
+                homeTransparent: false,
+              });
+              setTimeout(() => {
+                this.cornerSelectionReady = true;
+              }, 500);
+            } else if (state === 'aligningFirstCorner') {
+              this.alignmentReady = false;
+              
+              if (homeModel) {
+                homeModel.setVisible(false);
+              }
+
+              this.updateState({
+                showCornerSelection: false,
+                showHeadTrackingAlignment: true,
+                showControlPanel: false,
+                homeTransparent: true,
+                alignmentARModeRequested: true,
+              });
+              
+              if (this.xrStore) {
+                const checkARSession = setInterval(() => {
+                  const session = this.xrStore?.getState()?.session;
+                  if (session && (session as any).mode === 'immersive-ar') {
+                    this.alignmentReady = true;
+                    clearInterval(checkARSession);
+                  }
+                }, 100);
+                
+                setTimeout(() => {
+                  clearInterval(checkARSession);
+                  if (!this.alignmentReady) {
+                    console.warn('AR session not detected after timeout, enabling alignment anyway');
+                    this.alignmentReady = true;
+                  }
+                }, 5000);
+              } else {
+                setTimeout(() => {
+                  this.alignmentReady = true;
+                }, 1000);
+              }
+            } else if (state === 'aligningSecondCorner') {
+              this.alignmentReady = false;
+              setTimeout(() => {
+                this.alignmentReady = true;
+              }, 800);
+              this.updateState({ 
+                showHeadTrackingAlignment: true,
+                showControlPanel: false,
+                alignmentARModeRequested: true,
+              });
+            } else if (state === 'aligningThirdCorner') {
+              this.alignmentReady = false;
+              setTimeout(() => {
+                this.alignmentReady = true;
+              }, 800);
+              this.updateState({ 
+                showHeadTrackingAlignment: true,
+                showControlPanel: false,
+                alignmentARModeRequested: true,
+              });
+            } else if (state === 'aligningFourthCorner') {
+              this.alignmentReady = false;
+              setTimeout(() => {
+                this.alignmentReady = true;
+              }, 800);
+              this.updateState({ 
+                showHeadTrackingAlignment: true,
+                showControlPanel: false,
+                alignmentARModeRequested: true,
+              });
+            } else if (state === 'completed') {
+              const switchToVR = async () => {
+                const currentSession = this.xrStore?.getState()?.session;
+                
+                if (currentSession && (currentSession as any).mode === 'immersive-ar') {
+                  try {
+                    await currentSession.end();
+                    await new Promise(resolve => setTimeout(resolve, 800));
+                  } catch (err: any) {
+                    console.warn('Error ending AR session:', err);
+                  }
+                }
+                
+                try {
+                  // not yet working to switch back to VR mode after AR alignment
+                  if (navigator.xr && (navigator.xr as any).isSessionSupported) {
+                    const isVRSupported = await (navigator.xr as any).isSessionSupported('immersive-vr');
+                    if (isVRSupported) {
+                      await this.xrStore.enterVR();
+                    } else {
+                      console.warn('VR not supported');
+                    }
+                  }
+                } catch (vrErr) {
+                  console.warn('Failed to enter VR mode:', vrErr);
+                }
+              };
+              
+              switchToVR();
+              
+              // Show model with new alignment
+              if (homeModel) {
+                homeModel.setVisible(true);
+                homeModel.setOpacity(1.0);
+                homeModel.setTransparent(false);
+              }
+              
+              this.updateState({
+                alignmentStatus: "aligned",
+                showHeadTrackingAlignment: false,
+                showCornerSelection: false,
+                showControlPanel: false,
+                showInstructions: false,
+                showSidebar: true,
+                showAlignmentConfirm: true,
+                alignmentARModeRequested: false,
+                homeTransparent: false,
+                waitingForAlignmentConfirmation: true,
+              });
+              
+              this.showNotificationMessage(
+                '✅ Alignment complete! Please confirm the position.',
+                'success'
+              );
+            }
+          },
+        );
+        
+        this.prevTriggerState.clear();
+        this.cornerSelectionReady = false;
+
+        this.updateState({
+          alignmentMode: "world",
+          alignmentStatus: "aligning",
+          showAlignmentPanel: false,
+          showAlignmentConfirm: false,
+          showControlPanel: false,
+          showCornerSelection: true,
+          showHeadTrackingAlignment: false,
+          alignmentState: 'selectingCorner',
+          homeTransparent: false,
+        });
+        
+        this.navigationController.startAutomaticAlignment();
+      } else {
+        this.updateState({
+          alignmentMode: "world",
+          alignmentStatus: "aligning",
+          showAlignmentPanel: false,
+          showAlignmentConfirm: false,
+          showControlPanel: false,
+          showCornerSelection: true,
+          showHeadTrackingAlignment: false,
+          alignmentState: 'selectingCorner',
+          homeTransparent: false,
+        });
+      }
     } else {
-      // Free roam mode - skip alignment
       if (this.state.homeTransparent) {
         this.sceneManager?.getHomeModel()?.setOpacity(0.0);
       }
@@ -1019,28 +1322,141 @@ class SceneContentLogic {
     }
   }
 
+  // not fully working yet
   handleAlignmentConfirm(): void {
-    if (this.state.homeTransparent) {
-      this.sceneManager?.getHomeModel()?.setOpacity(0.0);
+    const homeModel = this.sceneManager?.getHomeModel();
+    
+    if (this.initialXRMode === 'ar') {
+      this.updateState({
+        alignmentStatus: "aligned",
+        showAlignmentConfirm: false,
+        showInstructions: true,
+        showSidebar: true,
+        alignmentARModeRequested: true,
+        homeTransparent: true,
+      });
+      
+      if (homeModel) {
+        homeModel.setOpacity(0.3);
+        homeModel.setTransparent(true);
+      }
+    } else {
+      if (this.state.homeTransparent) {
+        homeModel?.setOpacity(0.0);
+      }
+      this.updateState({
+        alignmentStatus: "aligned",
+        showAlignmentConfirm: false,
+        showInstructions: true,
+        showSidebar: true,
+        homeTransparent: this.state.homeTransparent,
+      });
     }
+    
+    this.initialXRMode = null;
+  }
+
+  // switch to manual alignment mode
+  handleManualAlignCancel(): void {
+    if (this.navigationController) {
+      this.navigationController.resetAlignment();
+    }
+
+    const homeModel = this.sceneManager?.getHomeModel();
+    if (homeModel) {
+      homeModel.setOpacity(0.5);
+    }
+
+    this.updateState({
+      alignmentMode: "world",
+      alignmentStatus: "aligning",
+      alignmentState: 'idle',
+      waitingForAlignmentConfirmation: false,
+      legacyManualAlignment: true,
+    });
+
+    this.showNotificationMessage(
+      'Use grip to position the model. Close when done.',
+      'info'
+    );
+  }
+
+  handleLegacyAlignmentConfirm(): void {
+    const currentSession = this.xrStore?.getState()?.session;
+    const isAR = currentSession && (currentSession as any).mode === 'immersive-ar';
+
+    const homeModel = this.sceneManager?.getHomeModel();
+    if (homeModel) {
+      homeModel.setOpacity(isAR ? 0.0 : 1.0);
+      if (isAR) {
+        homeModel.setTransparent(true);
+      } else {
+        homeModel.setTransparent(false);
+      }
+    }
+
     this.updateState({
       alignmentStatus: "aligned",
-      showAlignmentConfirm: false,
+      legacyManualAlignment: false,
+      showNotification: false,
+      notificationFromControlPanel: false,
       showInstructions: true,
       showSidebar: true,
+      alignmentARModeRequested: isAR,
+      homeTransparent: isAR,
     });
   }
 
   handleAlignmentCancel(): void {
+    // Cleanup hit test source
+    if (this.navigationController) {
+      this.navigationController.resetAlignment();
+    }
+    
+    // Reset to initial state
     if (this.state.homeTransparent) {
       this.sceneManager?.getHomeModel()?.setOpacity(0.0);
     }
+    
+    // End AR session if active
+    const currentSession = this.xrStore?.getState()?.session;
+    if (currentSession && (currentSession as any).mode === 'immersive-ar') {
+      currentSession.end().catch((err: any) => {
+        console.warn('Error ending AR session:', err);
+      });
+    }
+    
     this.updateState({
       alignmentMode: null,
       alignmentStatus: "pending",
       showAlignmentConfirm: false,
       showAlignmentPanel: true,
+      showCornerSelection: false,
+      showHeadTrackingAlignment: false,
+      alignmentState: 'idle',
+      alignmentARModeRequested: false,
+      legacyManualAlignment: false,
     });
+    
+    this.initialXRMode = null;
+  }
+
+  handleCornerSelect(cornerIndex: number): void {
+    if (!this.cornerSelectionReady) {
+      return;
+    }
+    
+    if (this.navigationController) {
+      this.navigationController.selectCorner(cornerIndex);
+    }
+    this.cornerSelectionReady = false;
+    this.updateState({
+      showCornerSelection: false,
+    });
+  }
+
+  handleConfirmAlignmentPoint(): void {
+    if (!this.navigationController) return;
   }
 
   handleToggleAlignmentMode(): void {
@@ -1052,22 +1468,55 @@ class SceneContentLogic {
         alignmentMode: "free",
       });
     } else if (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free") {
-      if (this.state.homeTransparent) {
-        this.sceneManager?.getHomeModel()?.setOpacity(0.3);
-      }
-      this.updateState({
-        alignmentMode: "world",
-        alignmentStatus: "aligning",
-        showAlignmentConfirm: true,
-      });
+      this.handleAlignmentModeSelect("world");
     }
   }
 
-  handleToggleHomeTransparency(): void {
+  async handleToggleHomeTransparency(): Promise<void> {
     const homeModel = this.sceneManager?.getHomeModel();
     if (!homeModel) return;
  
     const newTransparent = !this.state.homeTransparent;
+    
+    if (newTransparent && this.xrStore) {
+      // Switch to AR mode
+      try {
+        if (navigator.xr && (navigator.xr as any).isSessionSupported) {
+          const isARSupported = await (navigator.xr as any).isSessionSupported('immersive-ar');
+          
+          if (isARSupported) {
+            const currentSession = this.xrStore.getState().session;
+            if (currentSession && (currentSession as any).mode !== 'immersive-ar') {
+              const session = await (navigator.xr as any).requestSession('immersive-ar', {
+                requiredFeatures: ['local-floor'],
+                optionalFeatures: ['bounded-floor', 'hand-tracking', 'layers']
+              });
+              
+              await currentSession.end();
+              const gl = this.xrStore.getState().gl;
+              if (gl && gl.xr) {
+                await gl.xr.setSession(session);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to switch to AR mode:', err);
+      }
+    } else if (!newTransparent && this.xrStore) {
+      // Switch to VR mode
+      try {
+        const currentSession = this.xrStore.getState().session;
+        if (currentSession && (currentSession as any).mode === 'immersive-ar') {
+          await currentSession.end();
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await this.xrStore.enterVR();
+        }
+      } catch (err) {
+        console.warn('Failed to switch to VR mode:', err);
+      }
+    }
+    
     homeModel.setTransparent(newTransparent);
     this.updateState({ homeTransparent: newTransparent });
   }
@@ -1861,7 +2310,6 @@ class SceneContentLogic {
   this.sceneManager.moveFurniture(this.state.selectedItemId, newPos, false, false)
     .then((result) => {
       if (result.success) {
-       
         this.updateState({ gizmoPosition: newPos });
       } else if (result.needsConfirmation) {
         this.pendingMove = newPos;
@@ -1954,9 +2402,136 @@ class SceneContentLogic {
       });
   }
 
-  updateFrame(session: any, camera: THREE.Camera, delta: number): void {
+  updateFrame(session: any, camera: THREE.Camera, delta: number, frame?: XRFrame, gl?: THREE.WebGLRenderer): void {
     if (!session) return;
 
+    // Handle corner selection with head tracking
+    if (this.state.showCornerSelection && this.navigationController && this.sceneManager) {
+      const homeModel = this.sceneManager.getHomeModel();
+      if (homeModel && session.inputSources) {
+        const raycaster = new THREE.Raycaster();
+        const cameraPosition = new THREE.Vector3();
+        camera.getWorldPosition(cameraPosition);
+        const cameraDirection = new THREE.Vector3();
+        camera.getWorldDirection(cameraDirection);
+        raycaster.set(cameraPosition, cameraDirection);
+
+        const box = new THREE.Box3().setFromObject(homeModel.getGroup());
+        const maxY = box.max.y;
+        const corners = [
+          new THREE.Vector3(box.min.x, maxY, box.min.z).applyMatrix4(homeModel.getGroup().matrixWorld),
+          new THREE.Vector3(box.max.x, maxY, box.min.z).applyMatrix4(homeModel.getGroup().matrixWorld),
+          new THREE.Vector3(box.max.x, maxY, box.max.z).applyMatrix4(homeModel.getGroup().matrixWorld),
+          new THREE.Vector3(box.min.x, maxY, box.max.z).applyMatrix4(homeModel.getGroup().matrixWorld),
+        ];
+
+        let closestCornerIndex = -1;
+        let closestDistance = Infinity;
+        corners.forEach((corner, index) => {
+          const directionToCorner = corner.clone().sub(cameraPosition).normalize();
+          const dot = cameraDirection.dot(directionToCorner);
+          if (dot > 0.9) {
+            const distance = cameraPosition.distanceTo(corner);
+            if (distance < closestDistance) {
+              closestDistance = distance;
+              closestCornerIndex = index;
+            }
+          }
+        });
+
+        if (this.cornerSelectionReady) {
+          session.inputSources.forEach((source: any) => {
+            const gamepad = source.gamepad;
+            if (!gamepad || !gamepad.buttons) return;
+            const handedness = source.handedness as string;
+            if (!handedness || handedness === 'none') return;
+            
+            const triggerButton = gamepad.buttons[0];
+            const wasPressed = this.prevTriggerState.get(handedness) || false;
+            const isPressed = triggerButton?.pressed || false;
+            
+            this.prevTriggerState.set(handedness, isPressed);
+            
+            if (isPressed && !wasPressed && closestCornerIndex >= 0) {
+              this.handleCornerSelect(closestCornerIndex);
+            }
+          });
+        }
+      }
+    }
+
+    if (this.state.showHeadTrackingAlignment && this.navigationController && this.sceneManager) {
+      const raycaster = new THREE.Raycaster();
+      const homeModel = this.sceneManager.getHomeModel();
+      const sceneObjects: THREE.Object3D[] = [];
+      if (homeModel) {
+        sceneObjects.push(homeModel.getGroup());
+      }
+      this.sceneManager.getAllFurniture().forEach(f => sceneObjects.push(f.getGroup()));
+      
+      const xrReferenceSpace = gl?.xr?.getReferenceSpace() || null;
+      
+      const hitPoint = this.navigationController.updateHeadTrackingAlignment(
+        camera,
+        session,
+        raycaster,
+        { children: sceneObjects } as THREE.Scene,
+        frame,
+        xrReferenceSpace
+      );
+
+      let confirmedThisFrame = false;
+      if (session.inputSources) {
+        const sources = Array.from(session.inputSources as Iterable<any>);
+        for (const source of sources) {
+          if (confirmedThisFrame) break;
+          
+          const gamepad = source.gamepad;
+          if (!gamepad || !gamepad.buttons) continue;
+          const handedness = source.handedness as string;
+          if (!handedness || handedness === 'none') continue;
+
+          const triggerButton = gamepad.buttons[0];
+          const wasPressed = this.prevTriggerState.get(handedness) || false;
+          const isPressed = triggerButton?.pressed || false;
+          
+          this.prevTriggerState.set(handedness, isPressed);
+          
+          if (!this.alignmentReady) continue;
+          
+          if (isPressed && !wasPressed) {
+            const alignmentState = this.navigationController?.getAlignmentState();
+            
+            let confirmPoint = hitPoint;
+            if (!confirmPoint) {
+              console.warn('Trigger pressed but no hitPoint available - using fallback');
+              const cameraPosition = new THREE.Vector3();
+              camera.getWorldPosition(cameraPosition);
+              const cameraDirection = new THREE.Vector3();
+              camera.getWorldDirection(cameraDirection);
+              confirmPoint = cameraPosition.clone().addScaledVector(cameraDirection, 3.0);
+            }
+            
+            if (alignmentState === 'aligningFirstCorner' && this.navigationController) {
+              this.navigationController.confirmFirstCornerAlignment(confirmPoint);
+              confirmedThisFrame = true;
+              this.updateState({ showHeadTrackingAlignment: true });
+            } else if (alignmentState === 'aligningSecondCorner' && this.navigationController) {
+              this.navigationController.confirmSecondCornerAlignment(confirmPoint);
+              confirmedThisFrame = true;
+            } else if (alignmentState === 'aligningThirdCorner' && this.navigationController) {
+              this.navigationController.confirmThirdCornerAlignment(confirmPoint);
+              confirmedThisFrame = true;
+            } else if (alignmentState === 'aligningFourthCorner' && this.navigationController) {
+              this.navigationController.confirmFourthCornerAlignment(confirmPoint);
+              confirmedThisFrame = true;
+            }
+          }
+        }
+      }
+    }
+
+    // Set alignment mode in navigation controller
     const isAligning = this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world";
     if (this.navigationController) {
       this.navigationController.setAlignmentMode(isAligning);
@@ -2089,6 +2664,12 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     showAlignmentPanel: true,
     showAlignmentConfirm: false,
     homeTransparent: false,
+    showCornerSelection: false,
+    showHeadTrackingAlignment: false,
+    alignmentState: 'idle',
+    alignmentARModeRequested: false,
+    waitingForAlignmentConfirmation: false,
+    legacyManualAlignment: false,
     experienceMode: false,
     experienceWhiteboardId: null,
     whiteboardTool: "pen",
@@ -2108,15 +2689,29 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
 
     logicRef.current = new SceneContentLogic(homeId, navigate, updateState);
     logicRef.current.initializeManagers(scene);
+    logicRef.current.setXRStore(xrStore);
 
     return () => {
       logicRef.current?.cleanup();
     };
-  }, [homeId, navigate, scene]);
+  }, [homeId, navigate, scene, xrStore]);
 
   useEffect(() => {
     if (!xr.session || !logicRef.current) return;
     logicRef.current.setupXRRig(scene, camera);
+    
+    const sessionMode = (xr.session as any)?.mode;
+    const isInAlignmentMode = state.showHeadTrackingAlignment;
+    if (sessionMode === 'immersive-ar' && !state.loading && !isInAlignmentMode) {
+      const homeModel = logicRef.current.sceneManager?.getHomeModel();
+      if (homeModel) {
+        homeModel.setVisible(true);
+        if (!homeModel.getIsTransparent()) {
+          homeModel.setOpacity(0.3);
+          homeModel.setTransparent(true);
+        }
+      }
+    }
   }, [xr.session, scene, camera]);
   
   useEffect(() => {
@@ -2145,7 +2740,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     logicRef.current.loadDeployedItems();
   }, [logicRef.current?.modelUrlCache.size]);
 
-  useFrame((state, delta) => {
+  useFrame((state, delta, xrFrame) => {
     if (!logicRef.current) return;
     logicRef.current.renderer = state.gl;
 
@@ -2153,8 +2748,30 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
 
     const session = xr.session;
     if (!session) return;
-    logicRef.current.updateFrame(session, camera, delta);
+    
+    logicRef.current.updateFrame(session, camera, delta, xrFrame as XRFrame | undefined, state.gl);
   });
+
+  const { gl } = useThree();
+  
+  const isARAlignmentMode = state.showHeadTrackingAlignment;
+  const xrSession = xr.session;
+  const isARSession = xrSession && (xrSession as any).mode === 'immersive-ar';
+  const isARMode = isARAlignmentMode ? (isARSession || state.homeTransparent) : (state.homeTransparent || isARSession);
+  
+  useEffect(() => {
+    if (isARMode) {
+      gl.setClearColor(0x000000, 0);
+      gl.domElement.style.backgroundColor = 'transparent';
+      gl.autoClear = true;
+      gl.autoClearColor = true;
+      gl.autoClearDepth = true;
+      gl.autoClearStencil = true;
+    } else {
+      gl.setClearColor(0x808080, 1);
+      gl.domElement.style.backgroundColor = '#808080';
+    }
+  }, [isARMode, gl, isARAlignmentMode, isARSession, state.homeTransparent, xrSession]);
 
   if (!logicRef.current) return null;
 
@@ -2169,7 +2786,8 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     state.showScalePanel ||
     state.showPreciseCheckPanel ||
     state.showAlignmentPanel ||
-    state.showAlignmentConfirm;
+    state.showAlignmentConfirm ||
+    state.waitingForAlignmentConfirmation;
 
   if (state.loading) {
     return (
@@ -2189,11 +2807,15 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
 
   return (
     <>
-      <color args={["#808080"]} attach="background" />
+      {/* AR Session Handler */}
+      <ARSessionHandler arModeRequested={arModeRequested || state.alignmentARModeRequested} />
+
+      {!isARMode && <color args={["#808080"]} attach="background" />}
       <PerspectiveCamera makeDefault position={[0, 1.6, 2]} fov={75} />
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[5, 5, 5]} intensity={1} />
-      <Environment preset="warehouse" />
+      <ambientLight intensity={isARMode ? 0.2 : 0.5} />
+      <directionalLight position={[5, 5, 5]} intensity={isARMode ? 0.3 : 1} />
+      {!isARMode && <Environment preset="warehouse" />}
+
       <group position={[0, 0, 0]}>
       {logic.sceneManager && (
         <>
@@ -2282,6 +2904,51 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
               }
             />
           )}
+
+          {/* CORNER SELECTION VISUALIZATION */}
+          {state.showCornerSelection && logic.navigationController && logic.sceneManager && (
+            <CornerSelectionVisualization
+              corners={(() => {
+                // Get corners from home model
+                const homeModel = logic.sceneManager?.getHomeModel();
+                if (!homeModel) return [];
+                const box = new THREE.Box3().setFromObject(homeModel.getGroup());
+                const maxY = box.max.y;
+                const corners = [
+                  { position: new THREE.Vector3(box.min.x, maxY, box.min.z), index: 0 },
+                  { position: new THREE.Vector3(box.max.x, maxY, box.min.z), index: 1 },
+                  { position: new THREE.Vector3(box.max.x, maxY, box.max.z), index: 2 },
+                  { position: new THREE.Vector3(box.min.x, maxY, box.max.z), index: 3 },
+                ];
+                // Transform to world space
+                return corners.map(corner => ({
+                  position: corner.position.clone().applyMatrix4(homeModel.getGroup().matrixWorld),
+                  index: corner.index,
+                }));
+              })()}
+              selectedCornerIndex={logic.navigationController.getAlignmentData().selectedCorner?.index ?? null}
+              onCornerSelect={(index) => logic.handleCornerSelect(index)}
+              visible={state.showCornerSelection}
+            />
+          )}
+
+          {/* ALIGNMENT LINE VISUALIZATION */}
+          {state.showHeadTrackingAlignment && (
+            <AlignmentLineVisualization
+              visible={state.showHeadTrackingAlignment}
+              targetDepth={3.0}
+              onConfirm={() => logic.handleConfirmAlignmentPoint()}
+          instruction={
+            state.alignmentState === 'aligningFirstCorner'
+              ? "Corner 1/4: Point at the selected corner in the real world. Floor level is auto-detected. Press trigger to confirm."
+              : state.alignmentState === 'aligningSecondCorner'
+              ? "Corner 2/4: Point at the next corner (clockwise) in the real world. Press trigger to confirm."
+              : state.alignmentState === 'aligningThirdCorner'
+              ? "Corner 3/4: Point at the third corner (clockwise) in the real world. Press trigger to confirm."
+              : "Corner 4/4: Point at the last corner (clockwise) in the real world. Press trigger to confirm."
+          }
+            />
+          )}
         </>
       )}
     </group>
@@ -2302,13 +2969,13 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
         />
       </HeadLockedUI>
 
-      <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showAlignmentConfirm}>
+      {/* <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showAlignmentConfirm}>
         <VRAlignmentConfirmPanel 
           show={state.showAlignmentConfirm} 
           onConfirm={() => logic.handleAlignmentConfirm()} 
           onCancel={() => logic.handleAlignmentCancel()} 
         />
-      </HeadLockedUI>
+      </HeadLockedUI> */}
 
       <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showInstructions}>
         <VRInstructionPanel 
@@ -2360,12 +3027,26 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           show={state.showNotification}
           message={state.notificationMessage}
           type={state.notificationType}
-          onClose={() =>
-            logic.updateState({
+          showCancel={state.waitingForAlignmentConfirmation}
+          cancelText="Manually Align"
+          onCancel={() => {
+            logic.handleManualAlignCancel();
+          }}
+          onClose={() => {
+            if (state.legacyManualAlignment) {
+              logic.handleLegacyAlignmentConfirm();
+              return;
+            }
+            const update: Partial<SceneState> = {
               showNotification: false,
               notificationFromControlPanel: false,
-            })
-          }
+            };
+            if (state.waitingForAlignmentConfirmation) {
+              update.waitingForAlignmentConfirmation = false;
+              update.showInstructions = true;
+            }
+            logic.updateState(update);
+          }}
         />
       </HeadLockedUI>
       <HeadLockedUI

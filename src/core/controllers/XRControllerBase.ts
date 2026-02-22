@@ -90,6 +90,33 @@ export abstract class XRControllerBase {
   abstract reset(): void;
 }
 
+// Alignment state types
+export type AlignmentState = 
+  | 'idle'
+  | 'selectingCorner'
+  | 'aligningFirstCorner'
+  | 'aligningSecondCorner'
+  | 'aligningThirdCorner'
+  | 'aligningFourthCorner'
+  | 'completed';
+
+export interface Corner {
+  position: THREE.Vector3;
+  index: number;
+}
+
+export interface AlignmentData {
+  selectedCorner: Corner | null;
+  firstCornerWorldPos: THREE.Vector3 | null;
+  secondCornerWorldPos: THREE.Vector3 | null;
+  thirdCornerWorldPos: THREE.Vector3 | null;
+  fourthCornerWorldPos: THREE.Vector3 | null;
+  firstCornerModelPos: THREE.Vector3 | null;
+  secondCornerModelPos: THREE.Vector3 | null;
+  thirdCornerModelPos: THREE.Vector3 | null;
+  fourthCornerModelPos: THREE.Vector3 | null;
+}
+
 // NavigationController
 export class NavigationController extends XRControllerBase {
   private rig: THREE.Group | null = null;
@@ -97,6 +124,22 @@ export class NavigationController extends XRControllerBase {
   private onNavigationModeChange?: (isActive: boolean) => void;
   private homeModelGroup: THREE.Group | null = null;
   private alignmentMode: boolean = false;
+  private alignmentState: AlignmentState = 'idle';
+  private alignmentData: AlignmentData = {
+    selectedCorner: null,
+    firstCornerWorldPos: null,
+    secondCornerWorldPos: null,
+    thirdCornerWorldPos: null,
+    fourthCornerWorldPos: null,
+    firstCornerModelPos: null,
+    secondCornerModelPos: null,
+    thirdCornerModelPos: null,
+    fourthCornerModelPos: null,
+  };
+  private onAlignmentStateChange?: (state: AlignmentState, data: AlignmentData) => void;
+  private onAlignmentComplete?: (transform: { position: THREE.Vector3; rotation: THREE.Euler }) => void;
+  private boundingBox: THREE.Box3 | null = null;
+  private localBBox: THREE.Box3 | null = null;
 
   constructor(
     config: ControllerConfig = {},
@@ -116,10 +159,452 @@ export class NavigationController extends XRControllerBase {
 
   setHomeModelGroup(homeModelGroup: THREE.Group | null): void {
     this.homeModelGroup = homeModelGroup;
+    if (homeModelGroup) {
+      this.updateBoundingBox();
+    }
+  }
+
+  setBoundingBox(box: THREE.Box3 | null): void {
+    this.boundingBox = box;
   }
 
   setAlignmentMode(enabled: boolean): void {
     this.alignmentMode = enabled;
+    if (!enabled) {
+      this.resetAlignment();
+    }
+  }
+
+  setAlignmentCallbacks(
+    onStateChange?: (state: AlignmentState, data: AlignmentData) => void,
+    onComplete?: (transform: { position: THREE.Vector3; rotation: THREE.Euler }) => void
+  ): void {
+    this.onAlignmentStateChange = onStateChange;
+    this.onAlignmentComplete = onComplete;
+  }
+
+  getAlignmentState(): AlignmentState {
+    return this.alignmentState;
+  }
+
+  getAlignmentData(): AlignmentData {
+    return { ...this.alignmentData };
+  }
+
+  getModelCornersPublic(): Corner[] {
+    return this.getModelCorners();
+  }
+
+  private computeLocalBoundingBox(): THREE.Box3 | null {
+    if (!this.homeModelGroup) return null;
+
+    const savedPosition = this.homeModelGroup.position.clone();
+    const savedQuaternion = this.homeModelGroup.quaternion.clone();
+    const savedScale = this.homeModelGroup.scale.clone();
+
+    this.homeModelGroup.position.set(0, 0, 0);
+    this.homeModelGroup.quaternion.identity();
+    this.homeModelGroup.scale.set(1, 1, 1);
+    this.homeModelGroup.updateMatrix();
+    this.homeModelGroup.updateMatrixWorld(true);
+
+    const localBBox = new THREE.Box3().setFromObject(this.homeModelGroup);
+
+    this.homeModelGroup.position.copy(savedPosition);
+    this.homeModelGroup.quaternion.copy(savedQuaternion);
+    this.homeModelGroup.scale.copy(savedScale);
+    this.homeModelGroup.updateMatrix();
+    this.homeModelGroup.updateMatrixWorld(true);
+
+    return localBBox.isEmpty() ? null : localBBox;
+  }
+
+  startAutomaticAlignment(): void {
+    if (!this.homeModelGroup || !this.boundingBox) return;
+    this.localBBox = this.computeLocalBoundingBox();
+    
+    this.alignmentState = 'selectingCorner';
+    this.alignmentData = {
+      selectedCorner: null,
+      firstCornerWorldPos: null,
+      secondCornerWorldPos: null,
+      thirdCornerWorldPos: null,
+      fourthCornerWorldPos: null,
+      firstCornerModelPos: null,
+      secondCornerModelPos: null,
+      thirdCornerModelPos: null,
+      fourthCornerModelPos: null,
+    };
+    this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
+  }
+
+  selectCorner(cornerIndex: number): void {
+    if (this.alignmentState !== 'selectingCorner' || !this.boundingBox || !this.homeModelGroup) return;
+    
+    const corners = this.getModelCorners();
+    const cornersLocal = this.getModelCornersLocal();
+    if (cornerIndex < 0 || cornerIndex >= corners.length) return;
+    
+    this.alignmentData.selectedCorner = corners[cornerIndex]; 
+    this.alignmentData.firstCornerModelPos = cornersLocal[cornerIndex].position.clone();
+
+    this.alignmentState = 'aligningFirstCorner';
+    this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
+  }
+
+  confirmFirstCornerAlignment(worldPosition: THREE.Vector3): void {
+    if (this.alignmentState !== 'aligningFirstCorner') return;
+    
+    const position = worldPosition.clone();
+    position.y = 0;
+    
+    this.alignmentData.firstCornerWorldPos = position;
+    this.alignmentState = 'aligningSecondCorner';
+    this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
+  }
+
+  confirmSecondCornerAlignment(worldPosition: THREE.Vector3): void {
+    if (this.alignmentState !== 'aligningSecondCorner' || !this.alignmentData.selectedCorner || !this.homeModelGroup) {
+      console.warn('confirmSecondCornerAlignment: Invalid state or missing data', {
+        state: this.alignmentState,
+        hasSelectedCorner: !!this.alignmentData.selectedCorner,
+        hasHomeModelGroup: !!this.homeModelGroup
+      });
+      return;
+    }
+    
+    const cornersLocal = this.getModelCornersLocal();
+    const secondCornerIndex = (this.alignmentData.selectedCorner.index + 1) % 4;
+
+    const position = worldPosition.clone();
+    position.y = 0;
+    
+    this.alignmentData.secondCornerWorldPos = position;
+    this.alignmentData.secondCornerModelPos = cornersLocal[secondCornerIndex].position.clone();
+    
+    this.alignmentState = 'aligningThirdCorner';
+    this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
+  }
+
+  confirmThirdCornerAlignment(worldPosition: THREE.Vector3): void {
+    if (this.alignmentState !== 'aligningThirdCorner' || !this.alignmentData.selectedCorner || !this.homeModelGroup) {
+      console.warn('confirmThirdCornerAlignment: Invalid state or missing data');
+      return;
+    }
+    
+    const cornersLocal = this.getModelCornersLocal();
+    const thirdCornerIndex = (this.alignmentData.selectedCorner.index + 2) % 4;
+
+    const position = worldPosition.clone();
+    position.y = 0;
+    
+    this.alignmentData.thirdCornerWorldPos = position;
+    this.alignmentData.thirdCornerModelPos = cornersLocal[thirdCornerIndex].position.clone();
+    
+    this.alignmentState = 'aligningFourthCorner';
+    this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
+  }
+
+  confirmFourthCornerAlignment(worldPosition: THREE.Vector3): void {
+    if (this.alignmentState !== 'aligningFourthCorner' || !this.alignmentData.selectedCorner || !this.homeModelGroup) {
+      console.warn('confirmFourthCornerAlignment: Invalid state or missing data');
+      return;
+    }
+    
+    const cornersLocal = this.getModelCornersLocal();
+    const fourthCornerIndex = (this.alignmentData.selectedCorner.index + 3) % 4;
+
+    const position = worldPosition.clone();
+    position.y = 0;
+    
+    this.alignmentData.fourthCornerWorldPos = position;
+    this.alignmentData.fourthCornerModelPos = cornersLocal[fourthCornerIndex].position.clone();
+    
+    const transform = this.calculateTransform();
+    if (transform && this.homeModelGroup) {
+      this.homeModelGroup.position.copy(transform.position);
+      this.homeModelGroup.rotation.copy(transform.rotation);
+      this.homeModelGroup.updateMatrix();
+      this.homeModelGroup.updateMatrixWorld(true);
+      this.updateBoundingBox();
+      this.onAlignmentComplete?.(transform);
+    } else {
+      console.error('confirmFourthCornerAlignment: Failed to calculate transform', { transform, hasHomeModelGroup: !!this.homeModelGroup });
+    }
+    
+    this.alignmentState = 'completed';
+    this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
+  }
+
+  resetAlignment(): void {
+    this.alignmentState = 'idle';
+    this.alignmentData = {
+      selectedCorner: null,
+      firstCornerWorldPos: null,
+      secondCornerWorldPos: null,
+      thirdCornerWorldPos: null,
+      fourthCornerWorldPos: null,
+      firstCornerModelPos: null,
+      secondCornerModelPos: null,
+      thirdCornerModelPos: null,
+      fourthCornerModelPos: null,
+    };
+    this.localBBox = null;
+    this.cleanupHitTest();
+  }
+
+  private getModelCorners(): Corner[] {
+    if (!this.homeModelGroup) return [];
+    
+    const box = this.localBBox || this.computeLocalBoundingBox();
+    if (!box) return [];
+    
+    const maxY = box.max.y;
+    const localCorners: Corner[] = [
+      { position: new THREE.Vector3(box.min.x, maxY, box.min.z), index: 0 },
+      { position: new THREE.Vector3(box.max.x, maxY, box.min.z), index: 1 },
+      { position: new THREE.Vector3(box.max.x, maxY, box.max.z), index: 2 },
+      { position: new THREE.Vector3(box.min.x, maxY, box.max.z), index: 3 },
+    ];
+    
+    return localCorners.map(corner => ({
+      position: corner.position.clone().applyMatrix4(this.homeModelGroup!.matrixWorld),
+      index: corner.index,
+    }));
+  }
+
+  private getModelCornersLocal(): Corner[] {
+    const box = this.localBBox || this.computeLocalBoundingBox();
+    if (!box) return [];
+    
+    const maxY = box.max.y;
+    
+    return [
+      { position: new THREE.Vector3(box.min.x, maxY, box.min.z), index: 0 },
+      { position: new THREE.Vector3(box.max.x, maxY, box.min.z), index: 1 },
+      { position: new THREE.Vector3(box.max.x, maxY, box.max.z), index: 2 },
+      { position: new THREE.Vector3(box.min.x, maxY, box.max.z), index: 3 },
+    ];
+  }
+
+  private calculateTransform(): { position: THREE.Vector3; rotation: THREE.Euler } | null {
+    if (!this.alignmentData.firstCornerWorldPos || 
+        !this.alignmentData.secondCornerWorldPos ||
+        !this.alignmentData.thirdCornerWorldPos ||
+        !this.alignmentData.fourthCornerWorldPos ||
+        !this.alignmentData.firstCornerModelPos ||
+        !this.alignmentData.secondCornerModelPos ||
+        !this.alignmentData.thirdCornerModelPos ||
+        !this.alignmentData.fourthCornerModelPos ||
+        !this.homeModelGroup || !this.boundingBox) {
+      return null;
+    }
+    
+    const initialRotation = this.homeModelGroup.rotation.clone();
+    
+    const localBox = this.localBBox || this.computeLocalBoundingBox();
+    const modelFloorY = localBox ? localBox.min.y : 0;
+    
+    // Build all 4 corner pairs
+    const cornerPairs: { model: THREE.Vector3; world: THREE.Vector3 }[] = [
+      { model: this.alignmentData.firstCornerModelPos.clone(), world: this.alignmentData.firstCornerWorldPos.clone() },
+      { model: this.alignmentData.secondCornerModelPos.clone(), world: this.alignmentData.secondCornerWorldPos.clone() },
+      { model: this.alignmentData.thirdCornerModelPos.clone(), world: this.alignmentData.thirdCornerWorldPos.clone() },
+      { model: this.alignmentData.fourthCornerModelPos.clone(), world: this.alignmentData.fourthCornerWorldPos.clone() },
+    ];
+    
+    // Calculate rotation (average of corner pairs)
+    const rotationEstimates: number[] = [];
+    
+    for (let i = 0; i < cornerPairs.length; i++) {
+      const next = (i + 1) % cornerPairs.length;
+      const modelVec = new THREE.Vector3().subVectors(cornerPairs[next].model, cornerPairs[i].model);
+      const worldVec = new THREE.Vector3().subVectors(cornerPairs[next].world, cornerPairs[i].world);
+      
+      const modelVecH = new THREE.Vector3(modelVec.x, 0, modelVec.z);
+      const worldVecH = new THREE.Vector3(worldVec.x, 0, worldVec.z);
+      
+      if (modelVecH.length() > 0.001 && worldVecH.length() > 0.001) {
+        const modelAngle = Math.atan2(modelVecH.x, modelVecH.z);
+        const worldAngle = Math.atan2(worldVecH.x, worldVecH.z);
+        rotationEstimates.push(worldAngle - modelAngle);
+      }
+    }
+    
+    if (rotationEstimates.length === 0) {
+      const offset = new THREE.Vector3(
+        this.alignmentData.firstCornerWorldPos.x - this.alignmentData.firstCornerModelPos.x,
+        0,
+        this.alignmentData.firstCornerWorldPos.z - this.alignmentData.firstCornerModelPos.z
+      );
+      
+      offset.y = 0 - modelFloorY;
+      
+      return { 
+        position: this.homeModelGroup.position.clone().add(offset), 
+        rotation: new THREE.Euler(initialRotation.x, initialRotation.y, initialRotation.z) 
+      };
+    }
+    
+    let sinSum = 0, cosSum = 0;
+    for (const angle of rotationEstimates) {
+      sinSum += Math.sin(angle);
+      cosSum += Math.cos(angle);
+    }
+    const rotationY = Math.atan2(sinSum / rotationEstimates.length, cosSum / rotationEstimates.length);
+    
+    const rotation = new THREE.Euler(
+      initialRotation.x,
+      initialRotation.y + rotationY,
+      initialRotation.z
+    );
+    
+    const quaternion = new THREE.Quaternion().setFromEuler(rotation);
+    
+    // Calculate position (average of corner pairs after applying rotation)
+    const positionEstimates: THREE.Vector3[] = [];
+    
+    for (const pair of cornerPairs) {
+      const rotatedModelPos = pair.model.clone().applyQuaternion(quaternion);
+      
+      positionEstimates.push(new THREE.Vector3(
+        pair.world.x - rotatedModelPos.x,
+        0,
+        pair.world.z - rotatedModelPos.z
+      ));
+    }
+    
+    const avgPosition = new THREE.Vector3();
+    for (const est of positionEstimates) {
+      avgPosition.add(est);
+    }
+    avgPosition.divideScalar(positionEstimates.length);
+
+    avgPosition.y = 0 - modelFloorY;
+    
+    return { position: avgPosition, rotation };
+  }
+
+  private updateBoundingBox(): void {
+    if (!this.homeModelGroup) {
+      this.boundingBox = null;
+      return;
+    }
+    
+    this.boundingBox = new THREE.Box3().setFromObject(this.homeModelGroup);
+  }
+
+  private hitTestSource: XRHitTestSource | null = null;
+  private viewerSpace: XRReferenceSpace | null = null;
+  private lastHitPoint: THREE.Vector3 | null = null;
+
+  // Initialize AR hit test source
+  async initializeHitTest(session: XRSession): Promise<void> {
+    if (!session || this.hitTestSource) return;
+    
+    try {
+      this.viewerSpace = await (session as any).requestReferenceSpace('viewer');
+      this.hitTestSource = await (session as any).requestHitTestSource({ space: this.viewerSpace });
+    } catch (err) {
+      console.warn('Failed to initialize AR hit test:', err);
+    }
+  }
+
+  // Cleanup hit test source
+  cleanupHitTest(): void {
+    if (this.hitTestSource) {
+      this.hitTestSource.cancel();
+      this.hitTestSource = null;
+    }
+    this.viewerSpace = null;
+    this.lastHitPoint = null;
+  }
+
+  // Head tracking alignment methods using AR hit testing
+  updateHeadTrackingAlignment(
+    camera: THREE.Camera,
+    session: any,
+    raycaster: THREE.Raycaster,
+    scene: THREE.Scene,
+    frame?: XRFrame,
+    xrReferenceSpace?: XRReferenceSpace | null
+  ): THREE.Vector3 | null {
+    if (this.alignmentState !== 'aligningFirstCorner' && 
+        this.alignmentState !== 'aligningSecondCorner' &&
+        this.alignmentState !== 'aligningThirdCorner' &&
+        this.alignmentState !== 'aligningFourthCorner') {
+      return null;
+    }
+
+    const cameraPosition = new THREE.Vector3();
+    camera.getWorldPosition(cameraPosition);
+    
+    const cameraDirection = new THREE.Vector3();
+    camera.getWorldDirection(cameraDirection);
+
+    if (session && frame && (session as any).mode === 'immersive-ar') {
+      try {
+        if (!this.hitTestSource && session.requestHitTestSource) {
+          this.initializeHitTest(session).catch(err => {
+            console.warn('Failed to initialize hit test:', err);
+          });
+        }
+
+        if (this.hitTestSource && this.viewerSpace && frame) {
+          const hitTestResults = frame.getHitTestResults(this.hitTestSource);
+          
+          if (hitTestResults && hitTestResults.length > 0) {
+            const hit = hitTestResults[0];
+            const poseSpace = xrReferenceSpace || this.viewerSpace;
+            const pose = hit.getPose(poseSpace);
+            
+            if (pose) {
+              const xrMatrix = new THREE.Matrix4().fromArray(pose.transform.matrix);
+              const hitPoint = new THREE.Vector3().setFromMatrixPosition(xrMatrix);
+              this.lastHitPoint = hitPoint;
+              return hitPoint;
+            }
+          }
+        }
+
+        if (this.lastHitPoint) {
+          return this.lastHitPoint.clone();
+        }
+      } catch (err) {
+        console.warn('AR hit test failed, using fallback:', err);
+      }
+    }
+
+    const defaultDepth = 3.0;
+    const fallbackPoint = cameraPosition.clone().addScaledVector(cameraDirection, defaultDepth);
+    return fallbackPoint;
+  }
+
+  // Get alignment line position based on head tracking
+  getAlignmentLinePosition(
+    camera: THREE.Camera,
+    targetDepth: number
+  ): { position: THREE.Vector3; direction: THREE.Vector3 } | null {
+    if (this.alignmentState !== 'aligningFirstCorner' && 
+        this.alignmentState !== 'aligningSecondCorner' &&
+        this.alignmentState !== 'aligningThirdCorner' &&
+        this.alignmentState !== 'aligningFourthCorner') {
+      return null;
+    }
+
+    const cameraPosition = new THREE.Vector3();
+    camera.getWorldPosition(cameraPosition);
+    
+    const cameraDirection = new THREE.Vector3();
+    camera.getWorldDirection(cameraDirection);
+
+    // Calculate position at target depth
+    const linePosition = cameraPosition.clone().addScaledVector(cameraDirection, targetDepth);
+
+    return {
+      position: linePosition,
+      direction: cameraDirection.clone()
+    };
   }
 
   isNavigationActive(): boolean {
@@ -132,6 +617,10 @@ export class NavigationController extends XRControllerBase {
     delta: number
   ): void {
     if (!this.config.enabled || !this.rig || !session || !session.inputSources) return;
+
+    if (this.alignmentState !== 'idle' && this.alignmentState !== 'completed') {
+      return;
+    }
 
     let isGripPressed = false;
     let moveX = 0;
@@ -169,8 +658,8 @@ export class NavigationController extends XRControllerBase {
 
     if (!isGripPressed) return;
 
-    if (this.alignmentMode && this.homeModelGroup) {
-      // Alignment mode
+    // Legacy manual alignment mode (only when not in automatic alignment)
+    if (this.alignmentMode && this.homeModelGroup && this.alignmentState === 'idle') {
       if (Math.abs(rotateInput) > 0) {
         const rotationDelta = -rotateInput * this.config.rotateSpeed * delta;
         this.homeModelGroup.rotateY(rotationDelta);
@@ -191,8 +680,8 @@ export class NavigationController extends XRControllerBase {
 
         this.homeModelGroup.position.add(movement);
       }
-    } else if (this.rig) {
       // Normal navigation mode
+    } else if (this.rig) {
       if (Math.abs(rotateInput) > 0) {
         const rotationDelta = rotateInput * this.config.rotateSpeed * delta;
         this.rig.rotateY(rotationDelta);
