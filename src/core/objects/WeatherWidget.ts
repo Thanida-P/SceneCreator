@@ -2,7 +2,42 @@ import * as THREE from 'three';
 import { FurnitureItem } from './FurnitureItem';
 import { Transform } from './Base3DObject';
 import { fetchWeatherData, WeatherData } from '../../utils/WeatherService';
- 
+
+// Weather background images
+const WEATHER_CODE_TO_IMAGE: Record<number, string> = {
+  0: 'weather_clearSky',
+  1: 'weather_clearSky',
+  2: 'weather_partlyCloudy',
+  3: 'weather_overcast',
+  45: 'weather_fog',
+  48: 'weather_fog',
+  51: 'weather_rain',
+  53: 'weather_rain',
+  55: 'weather_rain',
+  61: 'weather_rain',
+  63: 'weather_rain',
+  65: 'weather_rain',
+  71: 'weather_snow',
+  73: 'weather_snow',
+  75: 'weather_snow',
+  80: 'weather_shower',
+  81: 'weather_shower',
+  82: 'weather_shower',
+  95: 'weather_thunderstorm',
+  96: 'weather_thunderstorm',
+  99: 'weather_thunderstorm',
+};
+
+const weatherImageCache: Map<string, HTMLImageElement> = new Map();
+
+function getWeatherImageUrl(name: string): string {
+  return new URL(`../../assets/weather/${name}.png`, import.meta.url).href;
+}
+
+function getWeatherImageName(code: number): string {
+  return WEATHER_CODE_TO_IMAGE[code] ?? 'weather_clearSky';
+}
+
 const CANVAS_WIDTH = 512;
 const CANVAS_HEIGHT = 320;
 const PANEL_WIDTH = 0.5;
@@ -24,8 +59,8 @@ export class WeatherWidget extends FurnitureItem {
     super(
       id,
       'Weather Widget',
-      -1, // No backend model
-      null, // No model path
+      -1,
+      null,
       {
         description: 'Live weather forecast display',
         category: 'Widgets',
@@ -78,7 +113,6 @@ export class WeatherWidget extends FurnitureItem {
     screen.position.z = 0.009;
     this.modelGroup.add(screen);
 
-    // Offset so bottom sits on floor (same as ClockWidget/WhiteboardWidget)
     const box = new THREE.Box3().setFromObject(this.modelGroup);
     const minY = box.min.y;
     this.modelGroup.position.y = -minY;
@@ -122,13 +156,32 @@ export class WeatherWidget extends FurnitureItem {
     this.canvasTexture.needsUpdate = true;
   }
  
-  private renderWeatherDisplay(): void {
-    if (!this.weatherData) return;
+  private drawBackgroundImage(imageName: string): void {
+    const cached = weatherImageCache.get(imageName);
+    if (cached && cached.complete && cached.naturalWidth > 0) {
+      const ctx = this.ctx;
+      const img = cached;
+      const imgAspect = img.width / img.height;
+      const canvasAspect = CANVAS_WIDTH / CANVAS_HEIGHT;
+      let sx = 0, sy = 0, sWidth = img.width, sHeight = img.height;
+      if (imgAspect > canvasAspect) {
+        sWidth = img.height * canvasAspect;
+        sx = (img.width - sWidth) / 2;
+      } else {
+        sHeight = img.width / canvasAspect;
+        sy = (img.height - sHeight) / 2;
+      }
+      ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    } else {
+      this.drawFallbackGradient();
+    }
+  }
+
+  private drawFallbackGradient(): void {
     const ctx = this.ctx;
     const w = this.weatherData;
- 
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    if (w.isDay) {
+    if (w?.isDay) {
       gradient.addColorStop(0, '#1e3a5f');
       gradient.addColorStop(1, '#0f172a');
     } else {
@@ -137,7 +190,48 @@ export class WeatherWidget extends FurnitureItem {
     }
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
- 
+  }
+
+  private loadWeatherBackground(imageName: string, onLoaded: () => void): void {
+    if (weatherImageCache.has(imageName)) {
+      onLoaded();
+      return;
+    }
+    const url = getWeatherImageUrl(imageName);
+    const img = new Image();
+    img.onload = () => {
+      weatherImageCache.set(imageName, img);
+      onLoaded();
+    };
+    img.onerror = () => {
+      onLoaded();
+    };
+    img.src = url;
+  }
+
+  private renderWeatherDisplay(): void {
+    if (!this.weatherData) return;
+    const w = this.weatherData;
+
+    const imageName = getWeatherImageName(w.weatherCode);
+    this.loadWeatherBackground(imageName, () => {
+      this.drawBackgroundImage(imageName);
+      this.drawTextScrim();
+      this.drawWeatherOverlay();
+      this.canvasTexture.needsUpdate = true;
+    });
+  }
+
+  private drawTextScrim(): void {
+    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+  }
+
+  private drawWeatherOverlay(): void {
+    if (!this.weatherData) return;
+    const ctx = this.ctx;
+    const w = this.weatherData;
+
     // Location name
     ctx.fillStyle = '#94a3b8';
     ctx.font = '20px sans-serif';
@@ -175,10 +269,8 @@ export class WeatherWidget extends FurnitureItem {
     ctx.textAlign = 'left';
     ctx.fillText(`Humidity: ${w.humidity}%`, 30, 260);
     ctx.fillText(`Wind: ${w.windSpeed} km/h`, 30, 290);
- 
-    this.canvasTexture.needsUpdate = true;
   }
- 
+
   private clearCanvas(color: string): void {
     this.ctx.fillStyle = color;
     this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
