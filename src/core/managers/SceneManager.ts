@@ -371,21 +371,18 @@ export class SceneManager {
       }
 
        // Check if object is in the air
-       const box = this.collisionDetector.furnitureBoxes.get(id);
-       if (box && roomBoundary) {
-         
-         if (!onFloor) {
-            furniture.setPosition(newPosition);
-            furniture.setFloating(true);
-            this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
-            this.lastValidPositions.set(id, newPosition);
-            return { success: false, needsConfirmation: false, needsPreciseCheck: false };
-         } else {
+      const box = this.collisionDetector.furnitureBoxes.get(id);
+      if (box && roomBoundary) {
+        if (!onFloor) {
+          furniture.setPosition(newPosition);
+          furniture.setFloating(true);
+          this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+          this.lastValidPositions.set(id, newPosition);
+          return { success: false, needsConfirmation: false, needsPreciseCheck: false };
+        } else {
           furniture.setPosition(newPosition);
           furniture.setFloating(false);
           this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
-          this.lastValidPositions.set(id, newPosition);
-          return { success: true, needsConfirmation: false, needsPreciseCheck: false };
         }
       }
     }
