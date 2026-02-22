@@ -8,6 +8,7 @@ interface VRNotificationPanelProps {
   type?: "success" | "error" | "info";
   onClose: () => void;
   showCancel?: boolean;
+  cancelText?: string;
   onCancel?: () => void;
 }
 
@@ -17,6 +18,7 @@ export function VRNotificationPanel({
   type = "info",
   onClose,
   showCancel = false,
+  cancelText = "Cancel",
   onCancel,
 }: VRNotificationPanelProps) {
   const [hoveredButton, setHoveredButton] = React.useState<string | null>(null);
@@ -160,7 +162,7 @@ export function VRNotificationPanel({
 
           {/* Cancel Button */}
           <group
-            position={[0.15, -0.15, 0.01]}
+            position={[0.17, -0.15, 0.01]}
             onPointerEnter={(e) => {
               e.stopPropagation();
               setHoveredButton("cancel");
@@ -177,7 +179,7 @@ export function VRNotificationPanel({
             }}
           >
             <mesh>
-              <RoundedPlane width={0.25} height={0.1} radius={0.03} />
+              <RoundedPlane width={0.35} height={0.1} radius={0.03} />
               <meshStandardMaterial
                 color={hoveredButton === "cancel" ? "#EF4444" : "#DC2626"}
                 emissive={"#DC2626"}
@@ -192,7 +194,7 @@ export function VRNotificationPanel({
               anchorY="middle"
               fontWeight="semi-bold"
             >
-              Cancel
+              {cancelText}
             </Text>
           </group>
 

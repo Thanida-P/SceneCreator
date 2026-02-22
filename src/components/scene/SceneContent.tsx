@@ -158,6 +158,7 @@ interface SceneState {
   alignmentState: 'idle' | 'selectingCorner' | 'aligningFirstCorner' | 'aligningSecondCorner' | 'aligningThirdCorner' | 'aligningFourthCorner' | 'completed';
   alignmentARModeRequested: boolean;
   waitingForAlignmentConfirmation: boolean;
+  legacyManualAlignment: boolean;
 }
 
 class SceneContentLogic {
@@ -240,6 +241,7 @@ class SceneContentLogic {
       alignmentState: 'idle',
       alignmentARModeRequested: false,
       waitingForAlignmentConfirmation: false,
+      legacyManualAlignment: false,
       showTexturePanel: false,
       textureOptions: [],
       selectedFurnitureTextureId: undefined,
@@ -1354,6 +1356,57 @@ class SceneContentLogic {
     this.initialXRMode = null;
   }
 
+  // switch to manual alignment mode
+  handleManualAlignCancel(): void {
+    if (this.navigationController) {
+      this.navigationController.resetAlignment();
+    }
+
+    const homeModel = this.sceneManager?.getHomeModel();
+    if (homeModel) {
+      homeModel.setOpacity(0.5);
+    }
+
+    this.updateState({
+      alignmentMode: "world",
+      alignmentStatus: "aligning",
+      alignmentState: 'idle',
+      waitingForAlignmentConfirmation: false,
+      legacyManualAlignment: true,
+    });
+
+    this.showNotificationMessage(
+      'Use grip to position the model. Close when done.',
+      'info'
+    );
+  }
+
+  handleLegacyAlignmentConfirm(): void {
+    const currentSession = this.xrStore?.getState()?.session;
+    const isAR = currentSession && (currentSession as any).mode === 'immersive-ar';
+
+    const homeModel = this.sceneManager?.getHomeModel();
+    if (homeModel) {
+      homeModel.setOpacity(isAR ? 0.0 : 1.0);
+      if (isAR) {
+        homeModel.setTransparent(true);
+      } else {
+        homeModel.setTransparent(false);
+      }
+    }
+
+    this.updateState({
+      alignmentStatus: "aligned",
+      legacyManualAlignment: false,
+      showNotification: false,
+      notificationFromControlPanel: false,
+      showInstructions: true,
+      showSidebar: true,
+      alignmentARModeRequested: isAR,
+      homeTransparent: isAR,
+    });
+  }
+
   handleAlignmentCancel(): void {
     // Cleanup hit test source
     if (this.navigationController) {
@@ -1382,6 +1435,7 @@ class SceneContentLogic {
       showHeadTrackingAlignment: false,
       alignmentState: 'idle',
       alignmentARModeRequested: false,
+      legacyManualAlignment: false,
     });
     
     this.initialXRMode = null;
@@ -2615,6 +2669,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     alignmentState: 'idle',
     alignmentARModeRequested: false,
     waitingForAlignmentConfirmation: false,
+    legacyManualAlignment: false,
     experienceMode: false,
     experienceWhiteboardId: null,
     whiteboardTool: "pen",
@@ -2973,20 +3028,23 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           message={state.notificationMessage}
           type={state.notificationType}
           showCancel={state.waitingForAlignmentConfirmation}
+          cancelText="Manually Align"
           onCancel={() => {
-            // Future implementation - cancel button does nothing for now
+            logic.handleManualAlignCancel();
           }}
           onClose={() => {
+            if (state.legacyManualAlignment) {
+              logic.handleLegacyAlignmentConfirm();
+              return;
+            }
             const update: Partial<SceneState> = {
               showNotification: false,
               notificationFromControlPanel: false,
             };
-            
             if (state.waitingForAlignmentConfirmation) {
               update.waitingForAlignmentConfirmation = false;
               update.showInstructions = true;
             }
-            
             logic.updateState(update);
           }}
         />
