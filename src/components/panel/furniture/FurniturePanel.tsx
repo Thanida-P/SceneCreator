@@ -24,6 +24,7 @@ const BACKEND_CATEGORY_MAP: Record<string, FurnitureCategory> = {
   "Office Room": "office-room",
   "Kitchen": "kitchen",
   "Widgets": "widgets",
+  "widget": "widgets",
   "living-room": "living-room",
   "bedroom": "bedroom",
   "office-room": "office-room",
@@ -34,7 +35,7 @@ const BACKEND_CATEGORY_MAP: Record<string, FurnitureCategory> = {
 export interface SystemWidgetDef {
   id: string;
   name: string;
-  widgetType: "clock" | "whiteboard";
+  widgetType: "clock" | "whiteboard" | "weather";
   category: "widgets";
   image?: string;
   type?: string;
@@ -54,6 +55,13 @@ export const SYSTEM_WIDGETS: SystemWidgetDef[] = [
     widgetType: "whiteboard",
     category: "widgets",
     type: "Whiteboard",
+  },
+  {
+    id: "sys-widget-weather",
+    name: "Weather",
+    widgetType: "weather",
+    category: "widgets",
+    type: "Weather Widget",
   },
 ];
 
@@ -88,11 +96,8 @@ export function VRFurniturePanel({
 
 
   const filteredCatalog = React.useMemo(() => {
-    if (selectedCategory === "widgets") {
-      return SYSTEM_WIDGETS;
-    }
     if (selectedCategory === "all") {
-      return [...catalog, ...SYSTEM_WIDGETS];
+      return catalog;
     }
     return catalog.filter((item: any) => {
       let itemCategory: FurnitureCategory = "all";
@@ -351,6 +356,31 @@ export function VRFurniturePanel({
                           anchorY="middle"
                         >
                           Whiteboard
+                        </Text>
+                      </group>
+                    ) : (f as any).widgetType === "weather" ? (
+                      <group>
+                        <mesh>
+                          <planeGeometry args={[0.2, 0.2]} />
+                          <meshStandardMaterial color="#E0F2FE" />
+                        </mesh>
+                        <Text
+                          position={[0, 0, 0.01]}
+                          fontSize={0.06}
+                          color="#0EA5E9"
+                          anchorX="center"
+                          anchorY="middle"
+                        >
+                          ☀
+                        </Text>
+                        <Text
+                          position={[0, -0.08, 0.01]}
+                          fontSize={0.02}
+                          color="#64748b"
+                          anchorX="center"
+                          anchorY="middle"
+                        >
+                          Weather
                         </Text>
                       </group>
                     ) : (

@@ -37,11 +37,23 @@ import { RotationGizmo } from "../panel/RotationGizmo";
 import { CornerSelectionVisualization } from "../panel/CornerSelectionVisualization";
 import { AlignmentLineVisualization } from "../panel/AlignmentLineVisualization";
 import { ARSessionHandler } from "./ARSessionHandler";
+import { WeatherWidget } from "../../core/objects/WeatherWidget";
 import { TextureSelectorPanel, TextureOption } from "../panel/texture/TextureSelectorPanel";
 import { EnvironmentSelectorPanel, EnvironmentOption } from "../panel/texture/EnvironmentSelectorPanel";
 
 const DIGITAL_HOME_PLATFORM_BASE_URL = import.meta.env
   .VITE_DIGITAL_HOME_PLATFORM_URL;
+const BUILTIN_WIDGET_NAMES = ["clock", "whiteboard", "weather"] as const;
+
+function getBuiltInWidgetType(itemData: {
+  category?: string;
+  name?: string;
+}): (typeof BUILTIN_WIDGET_NAMES)[number] | null {
+  if (itemData.category?.toLowerCase() !== "widget") return null;
+  const name = itemData.name?.toLowerCase();
+  if (!name || !BUILTIN_WIDGET_NAMES.includes(name as any)) return null;
+  return name as (typeof BUILTIN_WIDGET_NAMES)[number];
+}
 
 function WhiteboardHitTarget({
   boardMesh,
@@ -477,21 +489,26 @@ class SceneContentLogic {
 
       if (response.ok) {
         const data = await response.json();
-        const items = data.available_items.map((item: any) => ({
-          id: item.id.toString(),
-          name: item.name,
-          description: item.description,
-          model_id: item.model_id,
-          image: item.image,
-          category: item.category,
-          type: item.type,
-          is_container: item.is_container,
-          wall_mountable: item.wall_mountable || false,
-        }));
+        const items = data.available_items.map((item: any) => {
+          const widgetType = getBuiltInWidgetType(item);
+          return {
+            id: item.id.toString(),
+            name: item.name,
+            description: item.description,
+            model_id: item.model_id,
+            image: item.image,
+            category: item.category,
+            type: item.type,
+            is_container: item.is_container,
+            wall_mountable: item.wall_mountable || false,
+            ...(widgetType && { widgetType }),
+          };
+        });
 
         this.updateState({ furnitureCatalog: items });
 
         for (const item of items) {
+          if (getBuiltInWidgetType(item)) continue;
           await this.loadFurnitureModel(item.model_id);
         }
       }
@@ -520,7 +537,7 @@ class SceneContentLogic {
   }
 
   async loadDeployedItems(): Promise<void> {
-    if (!this.sceneManager || this.modelUrlCache.size === 0) return;
+    if (!this.sceneManager) return;
 
     this.updateState({ loading: true });
     try {
@@ -534,6 +551,28 @@ class SceneContentLogic {
         for (const itemObj of data.deployed_items) {
           const itemId = Object.keys(itemObj)[0];
           const itemData = itemObj[itemId];
+
+          const widgetType = getBuiltInWidgetType(itemData);
+          if (widgetType) {
+            const sd = itemData.spatialData;
+            const initialTransform = {
+              position: sd?.positions ?? [0, 0, 0],
+              rotation: sd?.rotation ?? [0, 0, 0],
+              scale: sd?.scale?.[0] ?? 1,
+            };
+            let furniture;
+            if (widgetType === "clock") {
+              furniture = new ClockWidget(itemId, itemData.name, initialTransform);
+            } else if (widgetType === "whiteboard") {
+              furniture = new WhiteboardWidget(itemId, itemData.name, initialTransform);
+            } else if (widgetType === "weather") {
+              furniture = new WeatherWidget(itemId, initialTransform);
+            }
+            if (furniture) {
+              await this.sceneManager.addFurniture(furniture);
+            }
+            continue;
+          }
 
           const modelPath = this.modelUrlCache.get(itemData.model_id);
           if (!modelPath) continue;
@@ -1725,22 +1764,21 @@ class SceneContentLogic {
         });
         break;
 
-      case "customize":
-        this.updateState({
-          showFurniture: true,
-          showControlPanel: false,
-          showSlider: false,
-          showInstructions: false,
-          showTransformGizmo: false,
-          showRotationGizmo: false,
-          showScalePanel: false,
-          showTexturePanel: false,
-          showEnvironmentPanel: false,
-        });
-        break;
-    }
+    case "customize":
+      this.updateState({ 
+        showFurniture: true,
+        showControlPanel: false,
+        showSlider: false,
+        showInstructions: false,
+        showTransformGizmo: false,
+        showRotationGizmo: false,
+        showScalePanel: false,
+        showTexturePanel: false,
+        showEnvironmentPanel: false,
+      });
+      break;
   }
-
+}
   async handleSaveScene(): Promise<void> {
     if (this.state.saving || !this.sceneManager) return;
 
@@ -2028,9 +2066,10 @@ class SceneContentLogic {
 
     const getPlacedCatalogId = (itemId: string) =>
       itemId.replace(/-\d+$/, "") || itemId;
-    const existingFurniture = allFurniture.find(
-      (item) => getPlacedCatalogId(item.getId()) === catalogId,
-    );
+    const existingFurniture = allFurniture.find((item) => {
+      if (catalogId === "sys-widget-weather" && item.getMetadata?.().type === "weather_widget") return true;
+      return getPlacedCatalogId(item.getId()) === catalogId;
+    });
 
     if (existingFurniture) {
       this.sceneManager.removeFurniture(existingFurniture.getId());
@@ -2086,6 +2125,28 @@ class SceneContentLogic {
             selectedItemPlacementMode: "floor",
           });
         }
+      });
+      return;
+    }
+
+    if (f.widgetType === "weather") {
+      const widget = new WeatherWidget(uniqueId, {
+        position: spawnPos,
+        rotation: initialRotation,
+        scale: this.state.sliderValue,
+      });
+      widget.setScale(this.state.sliderValue);
+
+      this.sceneManager.addFurniture(widget).then(() => {
+        this.sceneManager!.selectFurniture(uniqueId);
+        this.furnitureController?.setSelectedFurniture(uniqueId);
+        this.updateState({
+          selectedItemId: uniqueId,
+          rotationValue: initialRotation[1],
+          showSlider: true,
+          selectedItemPlacementMode: "floor",
+        });
+        this.showNotificationMessage("Weather widget added!", "success");
       });
       return;
     }
@@ -2397,6 +2458,8 @@ class SceneContentLogic {
     return this.sceneManager
       .getAllFurniture()
       .map((item) => {
+        const meta = item.getMetadata?.();
+        if (meta?.type === "weather_widget") return "sys-widget-weather";
         const id = item.getId();
         return id.replace(/-\d+$/, "") || id;
       });
