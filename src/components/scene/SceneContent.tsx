@@ -1146,6 +1146,7 @@ class SceneContentLogic {
               this.updateState({
                 showCornerSelection: true,
                 showHeadTrackingAlignment: false,
+                showControlPanel: false,
                 homeTransparent: false,
               });
               setTimeout(() => {
@@ -1161,6 +1162,7 @@ class SceneContentLogic {
               this.updateState({
                 showCornerSelection: false,
                 showHeadTrackingAlignment: true,
+                showControlPanel: false,
                 homeTransparent: true,
                 alignmentARModeRequested: true,
               });
@@ -1193,6 +1195,7 @@ class SceneContentLogic {
               }, 800);
               this.updateState({ 
                 showHeadTrackingAlignment: true,
+                showControlPanel: false,
                 alignmentARModeRequested: true,
               });
             } else if (state === 'aligningThirdCorner') {
@@ -1202,6 +1205,7 @@ class SceneContentLogic {
               }, 800);
               this.updateState({ 
                 showHeadTrackingAlignment: true,
+                showControlPanel: false,
                 alignmentARModeRequested: true,
               });
             } else if (state === 'aligningFourthCorner') {
@@ -1211,6 +1215,7 @@ class SceneContentLogic {
               }, 800);
               this.updateState({ 
                 showHeadTrackingAlignment: true,
+                showControlPanel: false,
                 alignmentARModeRequested: true,
               });
             } else if (state === 'completed') {
@@ -1254,6 +1259,7 @@ class SceneContentLogic {
                 alignmentStatus: "aligned",
                 showHeadTrackingAlignment: false,
                 showCornerSelection: false,
+                showControlPanel: false,
                 showInstructions: false,
                 showSidebar: true,
                 showAlignmentConfirm: true,
@@ -1278,6 +1284,7 @@ class SceneContentLogic {
           alignmentStatus: "aligning",
           showAlignmentPanel: false,
           showAlignmentConfirm: false,
+          showControlPanel: false,
           showCornerSelection: true,
           showHeadTrackingAlignment: false,
           alignmentState: 'selectingCorner',
@@ -1291,6 +1298,7 @@ class SceneContentLogic {
           alignmentStatus: "aligning",
           showAlignmentPanel: false,
           showAlignmentConfirm: false,
+          showControlPanel: false,
           showCornerSelection: true,
           showHeadTrackingAlignment: false,
           alignmentState: 'selectingCorner',
@@ -1406,14 +1414,7 @@ class SceneContentLogic {
         alignmentMode: "free",
       });
     } else if (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free") {
-      if (this.state.homeTransparent) {
-        this.sceneManager?.getHomeModel()?.setOpacity(0.3);
-      }
-      this.updateState({
-        alignmentMode: "world",
-        alignmentStatus: "aligning",
-        showAlignmentConfirm: true,
-      });
+      this.handleAlignmentModeSelect("world");
     }
   }
 
