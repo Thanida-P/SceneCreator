@@ -374,11 +374,24 @@ export class SceneManager {
       const box = this.collisionDetector.furnitureBoxes.get(id);
       if (box && roomBoundary) {
         if (!onFloor) {
-          furniture.setPosition(newPosition);
-          furniture.setFloating(true);
-          this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
-          this.lastValidPositions.set(id, newPosition);
-          return { success: false, needsConfirmation: false, needsPreciseCheck: false };
+          // Check if there's a furniture surface below
+          const surfaceResult = this.collisionDetector.findSurfaceBelow(id);
+          if (surfaceResult.hasSurface) {
+            // Snap object to sit on top of the surface below
+            const snapGap = 0.001;
+            const snappedY = newPosition[1] + (surfaceResult.surfaceY - box.min.y) + snapGap;
+            newPosition[1] = snappedY;
+            furniture.setPosition(newPosition);
+            furniture.setFloating(false);
+            this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+            this.lastValidPositions.set(id, newPosition);
+          } else {
+            furniture.setPosition(newPosition);
+            furniture.setFloating(true);
+            this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+            this.lastValidPositions.set(id, newPosition);
+            return { success: false, needsConfirmation: false, needsPreciseCheck: false };
+          }
         } else {
           furniture.setPosition(newPosition);
           furniture.setFloating(false);

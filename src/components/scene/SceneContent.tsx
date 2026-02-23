@@ -2338,55 +2338,33 @@ class SceneContentLogic {
   }
 
   handleGizmoMove(axis: "x" | "y" | "z", delta: number): void {
-    if (!this.state.selectedItemId || !this.sceneManager) {
-      console.warn(`[handleGizmoMove] Invalid state:`, {
-        selectedItemId: this.state.selectedItemId,
-        hasSceneManager: !!this.sceneManager,
-      });
-      return;
-    }
-    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
-
+    if (!this.state.selectedItemId || !this.sceneManager) return;
     const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
-    if (!furniture) {
-      console.warn(
-        `[handleGizmoMove] Furniture not found:`,
-        this.state.selectedItemId,
-      );
-      return;
-    }
-
+    if (!furniture) return;
     const currentPos = furniture.getPosition();
     const newPos: [number, number, number] = [...currentPos];
-
-  switch (axis) {
-    case 'x':
-      newPos[0] += delta;
-      break;
-    case 'y':
-      newPos[1] += delta;
-      break;
-    case 'z':
-      newPos[2] += delta;
-      break;
+    switch (axis) {
+      case 'x': newPos[0] += delta; break;
+      case 'y': newPos[1] += delta; break;
+      case 'z': newPos[2] += delta; break;
+    }
+    this.updateState({ gizmoPosition: newPos });
+    this.sceneManager.moveFurniture(this.state.selectedItemId, newPos, false, false)
+      .then((result) => {
+        if (!result.success) {
+          if (result.needsConfirmation) {
+            this.pendingMove = newPos;
+            this.updateState({ showMoveCloserPanel: true });
+          }
+          const revertPos = furniture.getPosition();
+          this.updateState({ gizmoPosition: revertPos });
+        }
+      })
+      .catch((err) => {
+        console.error(`[handleGizmoMove] Error:`, err);
+        this.updateState({ gizmoPosition: furniture.getPosition() });
+      });
   }
-
-  // Move furniture
-  this.sceneManager.moveFurniture(this.state.selectedItemId, newPos, false, false)
-    .then((result) => {
-      if (result.success) {
-        this.updateState({ gizmoPosition: newPos });
-      } else if (result.needsConfirmation) {
-        this.pendingMove = newPos;
-        this.updateState({ showMoveCloserPanel: true });
-      } else {
-        console.warn(`[handleGizmoMove] ❌ Move failed:`, result.reason);
-      }
-    })
-    .catch((err) => {
-      console.error(`[handleGizmoMove] Error:`, err);
-    });
-}
 
   handleGizmoRotate(axis: "x" | "y" | "z", deltaRadians: number): void {
     if (!this.state.selectedItemId || !this.sceneManager) {
