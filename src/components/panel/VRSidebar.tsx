@@ -156,18 +156,20 @@ function SidebarItem({ item, yPos, isActive, onHover, onClick, isHovered }: Side
 interface VRSidebarProps {
   show: boolean;
   onItemSelect: (itemId: string) => void;
+  extraItems?: SidebarItemData[];
 }
 
 export function VRSidebar({
   show,
   onItemSelect,
+  extraItems = [],
 }: VRSidebarProps) {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<string | null>(null);
 
   if (!show) return null;
 
-  const sidebarItems: SidebarItemData[] = [...baseSidebarItems];
+  const sidebarItems: SidebarItemData[] = [...baseSidebarItems, ...extraItems];
 
   const handleItemClick = (itemId: string) => {
     setActiveItem(itemId);

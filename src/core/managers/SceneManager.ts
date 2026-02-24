@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FurnitureItem } from '../objects/FurnitureItem';
+import { FurnitureItem, WallPlacementInfo } from '../objects/FurnitureItem';
 import { HomeModel } from '../objects/HomeModel';
 import { CollisionDetector } from './CollisionDetector';
 
@@ -9,10 +9,13 @@ export interface SceneConfig {
   floorLevel?: number;
 }
 
+export const MAX_WALL_MOUNT_DISTANCE = 0.4;
+
 export interface MoveResult {
   success: boolean;
   needsConfirmation: boolean;
   needsPreciseCheck: boolean;
+  needsUnmountConfirm?: boolean;
   reason?: string;
 }
 
@@ -209,7 +212,21 @@ export class SceneManager {
       reason: 'Furniture not found' 
     };
 
+    const wallPlacementEarly = furniture.getWallPlacement();
+    const isWallMountedEarly = furniture.isOnWall();
     if (!this.config.enableCollisionDetection) {
+      if (isWallMountedEarly && wallPlacementEarly) {
+        const distance = this.getDistanceFromWall(newPosition, wallPlacementEarly);
+        if (distance > MAX_WALL_MOUNT_DISTANCE) {
+          return {
+            success: false,
+            needsConfirmation: false,
+            needsPreciseCheck: false,
+            needsUnmountConfirm: true,
+            reason: 'Beyond max distance from wall',
+          };
+        }
+      }
       furniture.setPosition(newPosition);
       return { success: true, needsConfirmation: false, needsPreciseCheck: false };
     }
@@ -217,12 +234,36 @@ export class SceneManager {
     const originalPosition = furniture.getPosition();
     const isWallMounted = furniture.isOnWall();
     const isWallMountable = furniture.isWallMountable();
-    
+    const wallPlacement = furniture.getWallPlacement();
+
+    if (isWallMounted && wallPlacement) {
+      const distance = this.getDistanceFromWall(newPosition, wallPlacement);
+      if (distance > MAX_WALL_MOUNT_DISTANCE) {
+        return {
+          success: false,
+          needsConfirmation: false,
+          needsPreciseCheck: false,
+          needsUnmountConfirm: true,
+          reason: 'Beyond max distance from wall',
+        };
+      }
+      if (distance < 0) {
+        const clamped = this.clampPositionToWallDistance(
+          newPosition,
+          wallPlacement,
+          0
+        );
+        newPosition[0] = clamped[0];
+        newPosition[1] = clamped[1];
+        newPosition[2] = clamped[2];
+      }
+    }
+
     // Save last valid position
     if (!this.lastValidPositions.has(id)) {
       this.lastValidPositions.set(id, originalPosition);
     }
-    
+
     // Temporarily move to test position
     furniture.setPosition(newPosition);
     this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
@@ -558,22 +599,48 @@ export class SceneManager {
 
     const currentPosition = furniture.getPosition();
     const newPosition = furniture.moveAlongWall(deltaVertical, deltaHorizontal);
-    
+
     const wallPlacement = furniture.getWallPlacement();
-    if (wallPlacement && Math.abs(deltaInOut) < 0.001) {
-      const wallNormal = wallPlacement.wallNormal;
-      const wallPosition = wallPlacement.wallPosition;
-      const wallOffset = 0.02;
-      
+    if (!wallPlacement) {
+      return {
+        success: false,
+        needsConfirmation: false,
+        needsPreciseCheck: false,
+        reason: 'No wall placement',
+      };
+    }
+
+    const wallNormal = wallPlacement.wallNormal;
+    const wallPosition = wallPlacement.wallPosition;
+    const wallOffset = 0.02;
+
+    // Apply in/out from wall with max-distance constraint
+    if (Math.abs(deltaInOut) >= 0.001) {
+      const currentDist = this.getDistanceFromWall(currentPosition, wallPlacement);
+      const requestedDist = currentDist + deltaInOut;
+      if (requestedDist > MAX_WALL_MOUNT_DISTANCE) {
+        return {
+          success: false,
+          needsConfirmation: false,
+          needsPreciseCheck: false,
+          needsUnmountConfirm: true,
+          reason: 'Beyond max distance from wall',
+        };
+      }
+      const clampedDist = Math.max(0, Math.min(MAX_WALL_MOUNT_DISTANCE, requestedDist));
+      const posWithInOut = this.clampPositionToWallDistance(newPosition, wallPlacement, clampedDist);
+      newPosition[0] = posWithInOut[0];
+      newPosition[1] = posWithInOut[1];
+      newPosition[2] = posWithInOut[2];
+    } else {
+      // Keep flush to wall
       if (Math.abs(wallNormal[0]) > Math.abs(wallNormal[2])) {
-        // X wall
         if (wallNormal[0] > 0) {
           newPosition[0] = wallPosition + wallOffset;
         } else {
           newPosition[0] = wallPosition - wallOffset;
         }
       } else {
-        // Z wall
         if (wallNormal[2] > 0) {
           newPosition[2] = wallPosition + wallOffset;
         } else {
@@ -666,34 +733,6 @@ export class SceneManager {
       }
     }
     
-    if (Math.abs(deltaInOut) > 0.05) {
-      const wallPlacement = furniture.getWallPlacement();
-      if (wallPlacement && roomBoundary) {
-        furniture.setPosition(newPosition);
-        this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
-        const box = this.collisionDetector.furnitureBoxes.get(id);
-        
-        if (box) {
-          const margin = 0.1;
-          const wallNormal = wallPlacement.wallNormal;
-          const wallPosition = wallPlacement.wallPosition;
-          
-          let isStillTouchingWall = false;
-          if (Math.abs(wallNormal[2]) > Math.abs(wallNormal[0])) {
-            // Z wall
-            isStillTouchingWall = Math.abs(box.min.z - wallPosition) < margin || Math.abs(box.max.z - wallPosition) < margin;
-          } else {
-            // X wall
-            isStillTouchingWall = Math.abs(box.min.x - wallPosition) < margin || Math.abs(box.max.x - wallPosition) < margin;
-          }
-          
-          if (!isStillTouchingWall) {
-            furniture.setPlacementMode('floor');
-          }
-        }
-      }
-    }
-    
     furniture.setPosition(newPosition);
     
     if (this.config.enableCollisionDetection) {
@@ -741,6 +780,45 @@ export class SceneManager {
     return [spawnPos.x, spawnPos.y, spawnPos.z];
   }
 
+
+  private getDistanceFromWall(
+    position: [number, number, number],
+    wall: WallPlacementInfo
+  ): number {
+    const [nx, , nz] = wall.wallNormal;
+    const wp = wall.wallPosition;
+    if (Math.abs(nx) > Math.abs(nz)) {
+      return nx > 0 ? position[0] - wp : wp - position[0];
+    }
+    return nz > 0 ? position[2] - wp : wp - position[2];
+  }
+
+  private clampPositionToWallDistance(
+    position: [number, number, number],
+    wall: WallPlacementInfo,
+    distanceFromWall: number
+  ): [number, number, number] {
+    const result: [number, number, number] = [...position];
+    const [nx, , nz] = wall.wallNormal;
+    const wp = wall.wallPosition;
+    if (Math.abs(nx) > Math.abs(nz)) {
+      result[0] = nx > 0 ? wp + distanceFromWall : wp - distanceFromWall;
+    } else {
+      result[2] = nz > 0 ? wp + distanceFromWall : wp - distanceFromWall;
+    }
+    return result;
+  }
+
+  getWallDistanceFromWall(id: string): number | null {
+    const furniture = this.furnitureItems.get(id);
+    const wall = furniture?.getWallPlacement() ?? null;
+    if (!furniture || !wall) return null;
+    return this.getDistanceFromWall(furniture.getPosition(), wall);
+  }
+
+  getMaxWallMountDistance(): number {
+    return MAX_WALL_MOUNT_DISTANCE;
+  }
 
   private adjustPositionToWall(
     id: string,
