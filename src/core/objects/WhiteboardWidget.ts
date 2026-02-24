@@ -80,8 +80,8 @@ export class WhiteboardWidget extends FurnitureItem {
     this.boardMesh.userData.whiteboard = this;
     this.modelGroup.add(this.boardMesh);
 
-    const box = new THREE.Box3().setFromObject(this.modelGroup);
-    const minY = box.min.y;
+    frameGeo.computeBoundingBox();
+    const minY = frameGeo.boundingBox!.min.y;
     this.modelGroup.position.y = -minY;
   }
 

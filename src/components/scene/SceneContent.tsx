@@ -576,6 +576,9 @@ class SceneContentLogic {
               furniture = new WeatherWidget(itemId, initialTransform);
             }
             if (furniture) {
+              if (sd?.placement_mode === 'wall' && sd?.wall_placement) {
+                furniture.setWallPlacement(sd.wall_placement);
+              }
               await this.sceneManager.addFurniture(furniture);
             }
             continue;
@@ -589,6 +592,7 @@ class SceneContentLogic {
             category: itemData.category,
             type: itemData.type,
             isContainer: itemData.is_container,
+            wallMountable: itemData.wall_mountable || false,
           };
 
           const furniture = new FurnitureItem(
@@ -603,6 +607,11 @@ class SceneContentLogic {
               scale: itemData.spatialData.scale[0],
             },
           );
+
+          const sd = itemData.spatialData;
+          if (sd?.placement_mode === 'wall' && sd?.wall_placement) {
+            furniture.setWallPlacement(sd.wall_placement);
+          }
 
           await this.sceneManager.addFurniture(furniture);
         }
