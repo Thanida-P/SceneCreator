@@ -371,6 +371,40 @@ export class CollisionDetector {
     return minDistance;
   }
 
+  findSurfaceBelow(itemId: string): { hasSurface: boolean; surfaceY: number; supportingItemId: string | null } {
+    const box = this.furnitureBoxes.get(itemId);
+    if (!box || !this.roomBox) {
+      return { hasSurface: false, surfaceY: 0, supportingItemId: null };
+    }
+
+    const probeMaxY = box.min.y - this.EPSILON;
+    if (probeMaxY <= this.roomBox.min.y) {
+      return { hasSurface: false, surfaceY: 0, supportingItemId: null };
+    }
+
+    // Probe box: same X/Z footprint, extends from room floor to just below the item
+    const probeBox = new THREE.Box3(
+      new THREE.Vector3(box.min.x, this.roomBox.min.y, box.min.z),
+      new THREE.Vector3(box.max.x, probeMaxY, box.max.z)
+    );
+
+    let highestSurfaceY = this.roomBox.min.y;
+    let supportingItemId: string | null = null;
+
+    for (const [otherId, otherBox] of this.furnitureBoxes.entries()) {
+      if (otherId === itemId) continue;
+      if (otherBox.max.y >= box.min.y) continue;
+      if (probeBox.intersectsBox(otherBox)) {
+        if (otherBox.max.y > highestSurfaceY) {
+          highestSurfaceY = otherBox.max.y;
+          supportingItemId = otherId;
+        }
+      }
+    }
+
+    return { hasSurface: supportingItemId !== null, surfaceY: highestSurfaceY, supportingItemId };
+  }
+
   getAllFurnitureBoxes(): Map<string, THREE.Box3> {
     return new Map(this.furnitureBoxes);
   }

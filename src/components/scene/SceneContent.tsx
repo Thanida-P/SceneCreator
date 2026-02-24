@@ -134,6 +134,7 @@ interface SceneState {
   showUnmountPanel: boolean;
   showPreciseCheckPanel: boolean;
   preciseCheckInProgress: boolean;
+  awaitingCollisionAck: boolean;
   saving: boolean;
   loading: boolean;
   navigationMode: boolean;
@@ -231,6 +232,7 @@ class SceneContentLogic {
       showUnmountPanel: false,
       showPreciseCheckPanel: false,
       preciseCheckInProgress: false,
+      awaitingCollisionAck: false,
       saving: false,
       loading: true,
       navigationMode: false,
@@ -574,6 +576,9 @@ class SceneContentLogic {
               furniture = new WeatherWidget(itemId, initialTransform);
             }
             if (furniture) {
+              if (sd?.placement_mode === 'wall' && sd?.wall_placement) {
+                furniture.setWallPlacement(sd.wall_placement);
+              }
               await this.sceneManager.addFurniture(furniture);
             }
             continue;
@@ -587,6 +592,7 @@ class SceneContentLogic {
             category: itemData.category,
             type: itemData.type,
             isContainer: itemData.is_container,
+            wallMountable: itemData.wall_mountable || false,
           };
 
           const furniture = new FurnitureItem(
@@ -601,6 +607,11 @@ class SceneContentLogic {
               scale: itemData.spatialData.scale[0],
             },
           );
+
+          const sd = itemData.spatialData;
+          if (sd?.placement_mode === 'wall' && sd?.wall_placement) {
+            furniture.setWallPlacement(sd.wall_placement);
+          }
 
           await this.sceneManager.addFurniture(furniture);
         }
@@ -1873,6 +1884,7 @@ class SceneContentLogic {
     delta: THREE.Vector3,
   ): Promise<void> {
     if (!this.sceneManager) return;
+    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
 
     const furniture = this.sceneManager.getFurniture(id);
     if (!furniture) return;
@@ -2052,7 +2064,7 @@ class SceneContentLogic {
         "error",
       );
     } finally {
-      this.updateState({ preciseCheckInProgress: false });
+      this.updateState({ preciseCheckInProgress: false, awaitingCollisionAck: true });
     }
   }
 
@@ -2359,56 +2371,35 @@ class SceneContentLogic {
   }
 
   handleGizmoMove(axis: "x" | "y" | "z", delta: number): void {
-    if (!this.state.selectedItemId || !this.sceneManager) {
-      console.warn(`[handleGizmoMove] Invalid state:`, {
-        selectedItemId: this.state.selectedItemId,
-        hasSceneManager: !!this.sceneManager,
-      });
-      return;
-    }
-
+    if (!this.state.selectedItemId || !this.sceneManager) return;
     const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
-    if (!furniture) {
-      console.warn(
-        `[handleGizmoMove] Furniture not found:`,
-        this.state.selectedItemId,
-      );
-      return;
-    }
-
+    if (!furniture) return;
     const currentPos = furniture.getPosition();
     const newPos: [number, number, number] = [...currentPos];
-
-  switch (axis) {
-    case 'x':
-      newPos[0] += delta;
-      break;
-    case 'y':
-      newPos[1] += delta;
-      break;
-    case 'z':
-      newPos[2] += delta;
-      break;
-  }
-
-  // Move furniture
-  this.sceneManager.moveFurniture(this.state.selectedItemId, newPos, false, false)
-    .then((result) => {
-      if (result.success) {
-        this.updateState({ gizmoPosition: newPos });
-      } else if (result.needsConfirmation) {
-        this.pendingMove = newPos;
-        this.updateState({ showMoveCloserPanel: true });
+    switch (axis) {
+      case 'x': newPos[0] += delta; break;
+      case 'y': newPos[1] += delta; break;
+      case 'z': newPos[2] += delta; break;
+    }
+    this.updateState({ gizmoPosition: newPos });
+    this.sceneManager.moveFurniture(this.state.selectedItemId, newPos, false, false)
+      .then((result) => {
+        if (!result.success) {
+          if (result.needsConfirmation) {
+            this.pendingMove = newPos;
+            this.updateState({ showMoveCloserPanel: true });
       } else if (result.needsUnmountConfirm) {
         this.updateState({ showUnmountPanel: true });
-      } else {
-        console.warn(`[handleGizmoMove] ❌ Move failed:`, result.reason);
-      }
-    })
-    .catch((err) => {
-      console.error(`[handleGizmoMove] Error:`, err);
-    });
-}
+          }
+          const revertPos = furniture.getPosition();
+          this.updateState({ gizmoPosition: revertPos });
+        }
+      })
+      .catch((err) => {
+        console.error(`[handleGizmoMove] Error:`, err);
+        this.updateState({ gizmoPosition: furniture.getPosition() });
+      });
+  }
 
   handleConfirmUnmount(): void {
     if (!this.state.selectedItemId || !this.sceneManager) return;
@@ -2450,6 +2441,7 @@ class SceneContentLogic {
       });
       return;
     }
+    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
 
     const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
     if (!furniture) {
@@ -2486,15 +2478,17 @@ class SceneContentLogic {
 }
 
   handleScaleChange(newScale: number): void {
+  if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
   const clampedScale = Math.max(0.5, Math.min(3, newScale));
   this.updateState({ sliderValue: clampedScale });
-  
+
   if (this.state.selectedItemId && this.sceneManager) {
     this.sceneManager.scaleFurniture(this.state.selectedItemId, clampedScale);
   }
 }
 
   handleRotationSliderChange(newRotation: number): void {
+    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
     this.updateState({ rotationValue: newRotation });
     if (this.state.selectedItemId && this.sceneManager) {
       const furniture = this.sceneManager.getFurniture(
@@ -2756,6 +2750,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     showUnmountPanel: false,
     showPreciseCheckPanel: false,
     preciseCheckInProgress: false,
+    awaitingCollisionAck: false,
     saving: false,
     loading: true,
     navigationMode: false,
@@ -3166,6 +3161,9 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
               showNotification: false,
               notificationFromControlPanel: false,
             };
+            if (state.awaitingCollisionAck) {
+              update.awaitingCollisionAck = false;
+            }
             if (state.waitingForAlignmentConfirmation) {
               update.waitingForAlignmentConfirmation = false;
               update.showInstructions = true;

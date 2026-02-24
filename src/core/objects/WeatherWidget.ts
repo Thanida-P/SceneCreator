@@ -113,8 +113,8 @@ export class WeatherWidget extends FurnitureItem {
     screen.position.z = 0.009;
     this.modelGroup.add(screen);
 
-    const box = new THREE.Box3().setFromObject(this.modelGroup);
-    const minY = box.min.y;
+    frameGeometry.computeBoundingBox();
+    const minY = frameGeometry.boundingBox!.min.y;
     this.modelGroup.position.y = -minY;
   }
  
