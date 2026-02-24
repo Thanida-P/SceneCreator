@@ -15,6 +15,7 @@ import { VRControlPanel } from "../panel/control/ControlPanel";
 import { ControlPanelToggle } from "../panel/control/ControlPanelToggle";
 import { VRNotificationPanel } from "../panel/common/NotificationPanel";
 import { VRPreciseCollisionPanel } from "../panel/furniture/FurnitureCollisionPanel";
+import { WallPositionPanel, WALL_PANEL_STEP } from "../panel/WallPositionPanel";
 import { VRWhiteboardPanel } from "../panel/VRWhiteboardPanel";
 import { SceneManager } from "../../core/managers/SceneManager";
 import {
@@ -130,6 +131,7 @@ interface SceneState {
   notificationType: "success" | "error" | "info";
   notificationFromControlPanel: boolean;
   showMoveCloserPanel: boolean;
+  showUnmountPanel: boolean;
   showPreciseCheckPanel: boolean;
   preciseCheckInProgress: boolean;
   saving: boolean;
@@ -147,6 +149,7 @@ interface SceneState {
   showRotationGizmo: boolean;
   rotationGizmoPosition: [number, number, number] | null;
   showScalePanel: boolean;
+  showWallPanel: boolean;
   selectedItemPlacementMode: 'floor' | 'wall';
   alignmentStatus: 'pending' | 'aligning' | 'aligned';
   alignmentMode: 'world' | 'free' | null;
@@ -225,6 +228,7 @@ class SceneContentLogic {
       notificationType: "info",
       notificationFromControlPanel: false,
       showMoveCloserPanel: false,
+      showUnmountPanel: false,
       showPreciseCheckPanel: false,
       preciseCheckInProgress: false,
       saving: false,
@@ -242,6 +246,7 @@ class SceneContentLogic {
       showRotationGizmo: false,
       rotationGizmoPosition: null,
       showScalePanel: false,
+      showWallPanel: false,
       selectedItemPlacementMode: 'floor',
       alignmentStatus: 'pending',
       alignmentMode: null,
@@ -1115,6 +1120,7 @@ class SceneContentLogic {
     this.updateState({
       showControlPanel: fromControlPanel ? this.state.showControlPanel : false,
       showMoveCloserPanel: false,
+      showUnmountPanel: false,
       showPreciseCheckPanel: false,
       notificationMessage: message,
       notificationType: type,
@@ -1124,9 +1130,9 @@ class SceneContentLogic {
   }
 
   handleToggleUI(): void {
-    const { showMoveCloserPanel, showPreciseCheckPanel, showControlPanel, showInstructions, showFurniture, selectedItemId, experienceMode } = this.state;
+    const { showMoveCloserPanel, showUnmountPanel, showPreciseCheckPanel, showControlPanel, showInstructions, showFurniture, selectedItemId, experienceMode } = this.state;
 
-    if (showMoveCloserPanel || showPreciseCheckPanel || experienceMode) return;
+    if (showMoveCloserPanel || showUnmountPanel || showPreciseCheckPanel || experienceMode) return;
 
     if (showControlPanel) {
       this.updateState({ showControlPanel: false });
@@ -1595,10 +1601,10 @@ class SceneContentLogic {
   }
 
   handleToggleControlPanel(): void {
-    const { showMoveCloserPanel, showPreciseCheckPanel, showControlPanel } =
+    const { showMoveCloserPanel, showUnmountPanel, showPreciseCheckPanel, showControlPanel } =
       this.state;
 
-    if (showMoveCloserPanel || showPreciseCheckPanel) return;
+    if (showMoveCloserPanel || showUnmountPanel || showPreciseCheckPanel) return;
 
     this.updateState({
       showControlPanel: !showControlPanel,
@@ -1615,6 +1621,7 @@ class SceneContentLogic {
       showSlider: false,
       showControlPanel: false,
       showMoveCloserPanel: false,
+      showUnmountPanel: false,
       showPreciseCheckPanel: false,
     });
   }
@@ -1632,6 +1639,7 @@ class SceneContentLogic {
           showSlider: false,
           showRotationGizmo: false,
           showScalePanel: false,
+          showWallPanel: false,
           showTexturePanel: false,
           showEnvironmentPanel: false,
         });
@@ -1664,6 +1672,7 @@ class SceneContentLogic {
               showTransformGizmo: false,
               showSlider: false,
               showScalePanel: false,
+              showWallPanel: false,
               showTexturePanel: false,
               showEnvironmentPanel: false,
             });
@@ -1679,6 +1688,7 @@ class SceneContentLogic {
           if (furniture) {
             this.updateState({
               showScalePanel: true,
+              showWallPanel: false,
               showTransformGizmo: false,
               showRotationGizmo: false,
               showFurniture: false,
@@ -1690,6 +1700,20 @@ class SceneContentLogic {
           }
         }
 
+        break;
+
+      case "wall":
+        this.updateState({
+          showWallPanel: true,
+          showScalePanel: false,
+          showTransformGizmo: false,
+          showRotationGizmo: false,
+          showFurniture: false,
+          showControlPanel: false,
+          showSlider: false,
+          showTexturePanel: false,
+          showEnvironmentPanel: false,
+        });
         break;
 
       case "environment":
@@ -2375,6 +2399,8 @@ class SceneContentLogic {
       } else if (result.needsConfirmation) {
         this.pendingMove = newPos;
         this.updateState({ showMoveCloserPanel: true });
+      } else if (result.needsUnmountConfirm) {
+        this.updateState({ showUnmountPanel: true });
       } else {
         console.warn(`[handleGizmoMove] ❌ Move failed:`, result.reason);
       }
@@ -2383,6 +2409,38 @@ class SceneContentLogic {
       console.error(`[handleGizmoMove] Error:`, err);
     });
 }
+
+  handleConfirmUnmount(): void {
+    if (!this.state.selectedItemId || !this.sceneManager) return;
+    this.sceneManager.unmountFromWallAndFloat(this.state.selectedItemId);
+    const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
+    this.updateState({
+      showUnmountPanel: false,
+      gizmoPosition: furniture ? furniture.getPosition() : this.state.gizmoPosition,
+    });
+  }
+
+  handleCancelUnmount(): void {
+    this.updateState({ showUnmountPanel: false });
+  }
+
+  async handleWallMoveInOut(deltaInOut: number): Promise<void> {
+    if (!this.state.selectedItemId || !this.sceneManager) return;
+    const result = await this.sceneManager.moveWallFurniture(
+      this.state.selectedItemId,
+      0,
+      0,
+      deltaInOut,
+    );
+    if (result.needsUnmountConfirm) {
+      this.updateState({ showUnmountPanel: true });
+    } else if (result.success) {
+      const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
+      if (furniture) {
+        this.updateState({ gizmoPosition: furniture.getPosition() });
+      }
+    }
+  }
 
   handleGizmoRotate(axis: "x" | "y" | "z", deltaRadians: number): void {
     if (!this.state.selectedItemId || !this.sceneManager) {
@@ -2695,6 +2753,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     notificationType: "info",
     notificationFromControlPanel: false,
     showMoveCloserPanel: false,
+    showUnmountPanel: false,
     showPreciseCheckPanel: false,
     preciseCheckInProgress: false,
     saving: false,
@@ -2712,6 +2771,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     showRotationGizmo: false,
     rotationGizmoPosition: null,
     showScalePanel: false,
+    showWallPanel: false,
     selectedItemPlacementMode: "floor",
     showTexturePanel: false,
     textureOptions: [],
@@ -2846,7 +2906,9 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     state.showSlider || 
     state.showNotification ||
     state.showMoveCloserPanel ||
+    state.showUnmountPanel ||
     state.showScalePanel ||
+    state.showWallPanel ||
     state.showPreciseCheckPanel ||
     state.showAlignmentPanel ||
     state.showAlignmentConfirm ||
@@ -3129,6 +3191,20 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       <HeadLockedUI
         distance={1.5}
         verticalOffset={0}
+        enabled={state.showUnmountPanel}
+      >
+        <VRPreciseCollisionPanel
+          show={state.showUnmountPanel}
+          onConfirm={() => logic.handleConfirmUnmount()}
+          onCancel={() => logic.handleCancelUnmount()}
+          isChecking={false}
+          title="Unmount from wall?"
+          message="This object is at the maximum distance from the wall. Unmount it to place it elsewhere?"
+        />
+      </HeadLockedUI>
+      <HeadLockedUI
+        distance={1.5}
+        verticalOffset={0}
         enabled={state.showPreciseCheckPanel}
       >
         <VRPreciseCollisionPanel
@@ -3158,6 +3234,24 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       <HeadLockedUI
         distance={1.5}
         verticalOffset={0}
+        enabled={state.showWallPanel}
+      >
+        {state.selectedItemId && (
+          <WallPositionPanel
+            show={state.showWallPanel}
+            distanceFromWall={
+              logic.sceneManager?.getWallDistanceFromWall(state.selectedItemId) ?? 0
+            }
+            maxDistance={logic.sceneManager?.getMaxWallMountDistance() ?? 0.4}
+            onMoveIn={() => logic.handleWallMoveInOut(-WALL_PANEL_STEP)}
+            onMoveOut={() => logic.handleWallMoveInOut(WALL_PANEL_STEP)}
+            onClose={() => logic.updateState({ showWallPanel: false })}
+          />
+        )}
+      </HeadLockedUI>
+      <HeadLockedUI
+        distance={1.5}
+        verticalOffset={0}
         enabled={!!state.experienceWhiteboardId}
       >
         <group position={[0.4, 0, 0]}>
@@ -3179,6 +3273,19 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           <VRSidebar
             show={state.showSidebar && !state.experienceMode}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
+            extraItems={
+              state.selectedItemId && logic.sceneManager?.isWallMounted(state.selectedItemId)
+                ? [
+                    {
+                      id: "wall",
+                      icon: "▤",
+                      label: "Wall",
+                      color: "#64748B",
+                      description: "Move in/out from wall",
+                    },
+                  ]
+                : undefined
+            }
           />
         </group>
       </HeadLockedUI>
