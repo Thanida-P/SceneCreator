@@ -5,6 +5,7 @@ import { NotAuthorized } from './pages/auth/NotAuthorized';
 import { SceneCreator } from './pages/SceneCreator';
 import { ProtectedRoute } from './pages/auth/ProtectedRoute';
 import { AddModel } from './pages/AddModel';
+import { ProductLibrary } from './pages/ProductLibrary';
 
 function App() {
   return (
@@ -33,6 +34,14 @@ function App() {
           element={
             <ProtectedRoute>
               <AddModel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/product-library"
+          element={
+            <ProtectedRoute>
+              <ProductLibrary />
             </ProtectedRoute>
           }
         />
