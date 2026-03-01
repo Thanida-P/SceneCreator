@@ -1280,6 +1280,7 @@ class SceneContentLogic {
                 alignmentARModeRequested: true,
               });
             } else if (state === 'completed') {
+              this.sceneManager?.updateRoomBoundaryFromHomeModel();
               const switchToVR = async () => {
                 const currentSession = this.xrStore?.getState()?.session;
                 
@@ -1441,6 +1442,7 @@ class SceneContentLogic {
   }
 
   handleLegacyAlignmentConfirm(): void {
+    this.sceneManager?.updateRoomBoundaryFromHomeModel();
     const currentSession = this.xrStore?.getState()?.session;
     const isAR = currentSession && (currentSession as any).mode === 'immersive-ar';
 
