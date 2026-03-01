@@ -327,6 +327,9 @@ class SceneContentLogic {
         },
         onUnmountFromWall: (id) => {
           this.sceneManager?.unmountFromWallAndFloat(id);
+          if (this.state.selectedItemId === id) {
+            this.updateState({ selectedItemPlacementMode: "floor" });
+          }
         },
       }
     );
@@ -1918,6 +1921,12 @@ class SceneContentLogic {
       this.currentAABBPosition = null;
     } else if (result.success && !result.needsPreciseCheck) {
       this.currentAABBPosition = null;
+      if (this.state.selectedItemId === id) {
+        const updatedFurniture = this.sceneManager.getFurniture(id);
+        if (updatedFurniture?.isOnWall()) {
+          this.updateState({ selectedItemPlacementMode: "wall" });
+        }
+      }
     }
   }
 
@@ -2408,6 +2417,7 @@ class SceneContentLogic {
     this.updateState({
       showUnmountPanel: false,
       gizmoPosition: furniture ? furniture.getPosition() : this.state.gizmoPosition,
+      selectedItemPlacementMode: "floor",
     });
   }
 
