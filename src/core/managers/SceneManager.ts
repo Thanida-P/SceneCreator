@@ -61,6 +61,29 @@ export class SceneManager {
     return this.homeModel;
   }
 
+  updateRoomBoundaryFromHomeModel(): void {
+    const homeModel = this.homeModel;
+    if (!homeModel) return;
+
+    const boundary = homeModel.getBoundary();
+    if (!boundary) return;
+
+    const localBox = new THREE.Box3(
+      new THREE.Vector3(boundary.min_x, boundary.min_y, boundary.min_z),
+      new THREE.Vector3(boundary.max_x, boundary.max_y, boundary.max_z)
+    );
+    const worldBox = localBox.clone().applyMatrix4(homeModel.getGroup().matrixWorld);
+
+    this.collisionDetector.setRoomBoundary({
+      min_x: worldBox.min.x,
+      max_x: worldBox.max.x,
+      min_y: worldBox.min.y,
+      max_y: worldBox.max.y,
+      min_z: worldBox.min.z,
+      max_z: worldBox.max.z,
+    });
+  }
+
   getCollisionDetector(): CollisionDetector {
     return this.collisionDetector;
   }
