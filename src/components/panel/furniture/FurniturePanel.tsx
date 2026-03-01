@@ -687,7 +687,6 @@ function CategoryButtons({
                 anchorX="center"
                 anchorY="middle"
                 fontWeight={isSelected ? "600" : "400"}
-                clipPlanes={[leftClipPlane, rightClipPlane]}
               >
                 {CATEGORY_LABELS[category]}
               </Text>

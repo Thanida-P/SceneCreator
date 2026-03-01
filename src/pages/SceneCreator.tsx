@@ -211,16 +211,7 @@ export function SceneCreator() {
           setError('Failed to initialize 3D renderer. Please refresh the page.');
         }}
       >
-        <XR 
-          store={xrStore} 
-          sessionInit={arModeRequested ? {
-            mode: 'immersive-ar',
-            requiredFeatures: ['local-floor'],
-            optionalFeatures: ['bounded-floor', 'hand-tracking', 'layers']
-          } : {
-            optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
-          }}
-        >
+        <XR store={xrStore}>
           {homeId && <SceneContent homeId={homeId} digitalHome={digitalHome} arModeRequested={arModeRequested} />}
         </XR>
       </Canvas>

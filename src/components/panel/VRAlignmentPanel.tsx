@@ -2,8 +2,6 @@ import { Text } from "@react-three/drei";
 import { GradientBackground, RoundedPlane, ButtonBackground } from "./common/PanelElements";
 import { useState } from "react";
 
-type AlignmentMode = "world" | "free" | null;
-
 interface VRAlignmentPanelProps {
   show: boolean;
   onSelectMode: (mode: "world" | "free") => void;

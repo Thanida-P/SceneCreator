@@ -18,8 +18,6 @@ export function AlignmentLines({
   lineColor = "#00ff00",
 }: AlignmentLinesProps) {
   const groupRef = React.useRef<THREE.Group>(null);
-  const line1Ref = React.useRef<THREE.Line>(null);
-  const line2Ref = React.useRef<THREE.Line>(null);
   const camera = useThree((state) => state.camera);
 
   // Create corner lines geometry
@@ -52,9 +50,6 @@ export function AlignmentLines({
     const line1 = new THREE.Line(line1Geometry, lineMaterial);
     const line2 = new THREE.Line(line2Geometry, lineMaterial);
 
-    line1Ref.current = line1;
-    line2Ref.current = line2;
-
     groupRef.current.add(line1);
     groupRef.current.add(line2);
   }, [enabled, cornerPosition, lineLength, lineColor]);
@@ -80,12 +75,6 @@ export function AlignmentLines({
     // Position the lines at the corner position, but aligned with camera view
     groupRef.current.position.copy(cornerPosition);
 
-    // Make lines face the camera (but keep them horizontal/vertical)
-    const lookAtPos = new THREE.Vector3().addVectors(
-      cameraPosition,
-      cameraDirection.multiplyScalar(depth)
-    );
-    
     // Reset camera direction for next calculation
     camera.getWorldDirection(cameraDirection);
     

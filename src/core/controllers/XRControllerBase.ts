@@ -524,8 +524,8 @@ export class NavigationController extends XRControllerBase {
   updateHeadTrackingAlignment(
     camera: THREE.Camera,
     session: any,
-    raycaster: THREE.Raycaster,
-    scene: THREE.Scene,
+    _raycaster: THREE.Raycaster,
+    _scene: THREE.Scene,
     frame?: XRFrame,
     xrReferenceSpace?: XRReferenceSpace | null
   ): THREE.Vector3 | null {

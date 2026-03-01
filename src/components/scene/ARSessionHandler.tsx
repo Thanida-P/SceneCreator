@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import { useXRStore } from "@react-three/xr";
-import * as THREE from "three";
 interface ARSessionHandlerProps {
   arModeRequested: boolean;
   onARSessionReady?: () => void;
@@ -51,10 +50,8 @@ export function ARSessionHandler({ arModeRequested, onARSessionReady }: ARSessio
         // End current session if exists and is not AR
         if (currentSession && (currentSession as any).mode !== 'immersive-ar') {
           try {
-            if (!currentSession.ended) {
-              await currentSession.end();
-              await new Promise(resolve => setTimeout(resolve, 500));
-            }
+            await currentSession.end();
+            await new Promise(resolve => setTimeout(resolve, 500));
           } catch (err) {
             console.warn('Error ending previous session:', err);
           }
@@ -88,7 +85,7 @@ export function ARSessionHandler({ arModeRequested, onARSessionReady }: ARSessio
           
           // Add session end listener
           arSession.addEventListener('end', () => {
-            xrStore.setState({ session: null });
+            xrStore.setState({ session: undefined });
             sessionRequestedRef.current = false;
             isProcessingRef.current = false;
           });

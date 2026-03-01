@@ -50,8 +50,6 @@ export class WeatherWidget extends FurnitureItem {
   private canvasTexture: THREE.CanvasTexture;
   private weatherData: WeatherData | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
-  private isLoading: boolean = true;
- 
   constructor(
     id: string,
     initialTransform?: Partial<Transform>
@@ -120,14 +118,11 @@ export class WeatherWidget extends FurnitureItem {
  
   private async loadWeather(): Promise<void> {
     try {
-      this.isLoading = true;
       this.renderLoadingState();
       this.weatherData = await fetchWeatherData();
-      this.isLoading = false;
       this.renderWeatherDisplay();
     } catch (err) {
       console.error('WeatherWidget: failed to fetch weather', err);
-      this.isLoading = false;
       this.renderErrorState();
     }
   }
