@@ -1191,7 +1191,7 @@ class SceneContentLogic {
         }
 
         this.navigationController.setAlignmentCallbacks(
-          (state, data) => {
+          (state, _data) => {
             this.updateState({ alignmentState: state });
 
             if (state === 'selectingCorner') {
@@ -2894,8 +2894,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
   if (!logicRef.current) return null;
 
   const logic = logicRef.current;
-  const isAligned = state.alignmentStatus === "aligned";
-  const uiLocked = state.showFurniture || 
+  const uiLocked = state.showFurniture ||
     state.showControlPanel || 
     state.showInstructions || 
     state.showSlider || 

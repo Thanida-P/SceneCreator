@@ -15,15 +15,15 @@ interface AlignmentLineVisualizationProps {
 export function AlignmentLineVisualization({
   visible,
   targetDepth,
-  onConfirm,
+  onConfirm: _onConfirm,
   instruction,
   onHitPointUpdate,
 }: AlignmentLineVisualizationProps) {
   const lineGroupRef = React.useRef<THREE.Group>(null);
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
-  const [currentDepth, setCurrentDepth] = React.useState(targetDepth);
-  const [hitPoint, setHitPoint] = React.useState<THREE.Vector3 | null>(null);
+  const [_currentDepth, setCurrentDepth] = React.useState(targetDepth);
+  const [_hitPoint, setHitPoint] = React.useState<THREE.Vector3 | null>(null);
   const hitTestSourceRef = React.useRef<XRHitTestSource | null>(null);
   const viewerSpaceRef = React.useRef<XRReferenceSpace | null>(null);
   const xr = useXR();
@@ -64,7 +64,7 @@ export function AlignmentLineVisualization({
     };
   }, [visible, xr.session]);
 
-  useFrame((state, delta, frame?: XRFrame) => {
+  useFrame((_state, _delta, frame?: XRFrame) => {
     if (!visible || !lineGroupRef.current) return;
 
     const cameraPosition = new THREE.Vector3();

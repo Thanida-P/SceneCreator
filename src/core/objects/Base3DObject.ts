@@ -98,7 +98,7 @@ export abstract class Base3DObject {
     this.group.updateMatrixWorld(true);
   }
 
-  async loadModel(scene: THREE.Scene): Promise<void> {
+  async loadModel(_scene: THREE.Scene): Promise<void> {
     if (!this.modelPath) {
       return;
     }

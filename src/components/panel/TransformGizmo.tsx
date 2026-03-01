@@ -81,7 +81,7 @@ function AxisArrow({ axis, color, position, rotation, onAxisDrag }: AxisArrowPro
   useEffect(() => {
     if (!dragging) return;
 
-    const handleGlobalPointerUp = (e: PointerEvent) => {
+    const handleGlobalPointerUp = (_e: PointerEvent) => {
       
       setDragging(false);
       dragStartRef.current = null;

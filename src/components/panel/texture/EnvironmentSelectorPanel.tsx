@@ -43,9 +43,8 @@ function EnvironmentButton({
   size?: number;
 }) {
   useCursor(isHovered, "pointer");
-  const [textureLoaded, setTextureLoaded] = useState(false);
+  const [_textureLoaded, setTextureLoaded] = useState(false);
 
-  // ✅ FIX: Load the texture image if available
   useEffect(() => {
     if (texture.threeTexture) {
       setTextureLoaded(true);

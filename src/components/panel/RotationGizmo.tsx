@@ -226,11 +226,11 @@ function RotationArc({ axis, color, position, rotation, radius, onAxisDrag }: Ro
   );
 }
 
-export function RotationGizmo({ 
-  position, 
-  onRotate, 
+export function RotationGizmo({
+  position,
+  onRotate,
   visible,
-  currentRotation = [0, 0, 0]
+  currentRotation: _currentRotation = [0, 0, 0]
 }: RotationGizmoProps) {
   const groupRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
