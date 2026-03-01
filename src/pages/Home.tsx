@@ -101,6 +101,10 @@ export class HomeLogic {
     this.callbacks.navigate('/add-model');
   }
 
+  handleProductLibrary(): void {
+    this.callbacks.navigate('/product-library');
+  }
+
   formatDate(dateString: string): string {
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
@@ -238,6 +242,28 @@ export class HomeClass extends Component<HomeClassProps, HomeState> {
                 onMouseOut={(e) => !loading && (e.currentTarget.style.background = '#3b82f6')}
               >
                 {loading ? '⟳ Loading...' : '↻ Refresh'}
+              </button>
+
+              <button
+                onClick={() => this.logic.handleProductLibrary()}
+                style={{
+                  padding: '0.5rem 1rem',
+                  background: '#8b5cf6',
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: '#ffffff',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontWeight: 500,
+                  transition: 'background 0.2s',
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.background = '#7c3aed')}
+                onMouseOut={(e) => (e.currentTarget.style.background = '#8b5cf6')}
+              >
+                📦 Product Library
               </button>
 
               <button
