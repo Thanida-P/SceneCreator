@@ -7,7 +7,7 @@ import { FurnitureImage } from "./FurnitureImage";
 import { RoundedPlane, GradientBackground, CardBackground } from "../common/PanelElements";
 import digitalClockIconUrl from "../../../assets/icons/digital-clock.png";
 
-export type FurnitureCategory = "all" | "living-room" | "bedroom" | "office-room" | "kitchen" | "widgets";
+export type FurnitureCategory = "all" | "living-room" | "bedroom" | "office-room" | "kitchen" | "widgets" | "wallpaper";
 
 const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   "all": "All Categories",
@@ -16,6 +16,7 @@ const CATEGORY_LABELS: Record<FurnitureCategory, string> = {
   "office-room": "Office Room",
   "kitchen": "Kitchen",
   "widgets": "Widgets",
+  "wallpaper": "Wallpaper",
 };
 
 const BACKEND_CATEGORY_MAP: Record<string, FurnitureCategory> = {
@@ -25,6 +26,8 @@ const BACKEND_CATEGORY_MAP: Record<string, FurnitureCategory> = {
   "Kitchen": "kitchen",
   "Widgets": "widgets",
   "widget": "widgets",
+  "Wallpaper": "wallpaper",
+  "wallpaper": "wallpaper",
   "living-room": "living-room",
   "bedroom": "bedroom",
   "office-room": "office-room",
@@ -552,7 +555,7 @@ function CategoryButtons({
   setHoveredButton: (button: string | null) => void;
   yPosition: number;
 }) {
-  const categories: FurnitureCategory[] = ["all", "living-room", "bedroom", "office-room", "kitchen", "widgets"];
+  const categories: FurnitureCategory[] = ["all", "living-room", "bedroom", "office-room", "kitchen", "widgets", "wallpaper"];
   const [scrollOffset, setScrollOffset] = React.useState(0);
   
   const buttonWidth = 0.16;

@@ -157,19 +157,24 @@ interface VRSidebarProps {
   show: boolean;
   onItemSelect: (itemId: string) => void;
   extraItems?: SidebarItemData[];
+  hiddenItemIds?: string[];
 }
 
 export function VRSidebar({
   show,
   onItemSelect,
   extraItems = [],
+  hiddenItemIds = [],
 }: VRSidebarProps) {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<string | null>(null);
 
   if (!show) return null;
 
-  const sidebarItems: SidebarItemData[] = [...baseSidebarItems, ...extraItems];
+  const allItems = [...baseSidebarItems, ...extraItems];
+  const sidebarItems: SidebarItemData[] = hiddenItemIds.length > 0
+    ? allItems.filter((item) => !hiddenItemIds.includes(item.id))
+    : allItems;
 
   const handleItemClick = (itemId: string) => {
     setActiveItem(itemId);
@@ -177,6 +182,9 @@ export function VRSidebar({
   };
 
   const sidebarHeight = 0.25 + sidebarItems.length * 0.25;
+  const topPadding = 0.1;
+  const itemSpacing = 0.25;
+  const firstItemY = sidebarHeight / 2 - topPadding - 0.06;
 
   return (
     <group position={[0.01, 0, 0]}>
@@ -197,7 +205,7 @@ export function VRSidebar({
         <SidebarItem
           key={item.id}
           item={item}
-          yPos={0.8 - index * 0.25}
+          yPos={firstItemY - index * itemSpacing}
           isActive={activeItem === item.id}
           isHovered={hoveredItem === item.id}
           onHover={setHoveredItem}
@@ -207,7 +215,7 @@ export function VRSidebar({
 
       {sidebarItems.map((_, index) => {
         if (index === sidebarItems.length - 1) return null;
-        const yPos = 0.5 - index * 0.25 - 0.125;
+        const yPos = firstItemY - index * itemSpacing - itemSpacing / 2;
         return (
           <mesh key={`divider-${index}`} position={[SIDEBAR_CENTER_X, yPos, 0]}>
             <planeGeometry args={[0.1, 0.002]} />

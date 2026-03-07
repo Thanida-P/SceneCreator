@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FurnitureItem, WallPlacementInfo } from '../objects/FurnitureItem';
 import { HomeModel } from '../objects/HomeModel';
+import { WallpaperItem } from '../objects/WallpaperItem';
 import { CollisionDetector } from './CollisionDetector';
 
 export interface SceneConfig {
@@ -17,6 +18,17 @@ export interface MoveResult {
   needsPreciseCheck: boolean;
   needsUnmountConfirm?: boolean;
   reason?: string;
+}
+
+export interface WallInfo {
+  id: string;
+  label: string;
+  wallNormal: [number, number, number];
+  localNormal?: [number, number, number];
+  wallPosition: number;
+  width: number;
+  height: number;
+  center: [number, number, number];
 }
 
 export class SceneManager {
@@ -61,6 +73,124 @@ export class SceneManager {
     return this.homeModel;
   }
 
+  getAvailableWalls(): WallInfo[] {
+    if (this.homeModel) {
+      const transformed = this.getAvailableWallsFromHomeModelTransform();
+      if (transformed.length > 0) return transformed;
+    }
+    return this.getAvailableWallsFromRoomBoundary();
+  }
+
+  getAvailableWallsFromHomeModelTransform(): WallInfo[] {
+    const boundary = this.homeModel?.getBoundary();
+    if (!boundary || !this.homeModel) return [];
+
+    const localBox = {
+      min: { x: boundary.min_x, y: boundary.min_y, z: boundary.min_z },
+      max: { x: boundary.max_x, y: boundary.max_y, z: boundary.max_z },
+    };
+    const wallOffset = 0.02;
+    const homeGroup = this.homeModel.getGroup();
+    homeGroup.updateMatrixWorld(true);
+    const matrix = homeGroup.matrixWorld;
+    const normalMatrix = new THREE.Matrix3().getNormalMatrix(matrix);
+
+    const toWorldCenter = (lx: number, ly: number, lz: number): [number, number, number] => {
+      const v = new THREE.Vector3(lx, ly, lz).applyMatrix4(matrix);
+      return [v.x, v.y, v.z];
+    };
+    const toWorldNormal = (nx: number, ny: number, nz: number): [number, number, number] => {
+      const v = new THREE.Vector3(nx, ny, nz).applyMatrix3(normalMatrix).normalize();
+      return [v.x, v.y, v.z];
+    };
+
+    const walls: WallInfo[] = [];
+    const cy = (localBox.min.y + localBox.max.y) / 2;
+    const cx = (localBox.min.x + localBox.max.x) / 2;
+    const cz = (localBox.min.z + localBox.max.z) / 2;
+
+    const addWall = (
+      id: string,
+      label: string,
+      lx: number,
+      ly: number,
+      lz: number,
+      lnx: number,
+      lny: number,
+      lnz: number,
+      w: number,
+      h: number
+    ) => {
+      walls.push({
+        id,
+        label,
+        wallNormal: toWorldNormal(lnx, lny, lnz),
+        localNormal: [lnx, lny, lnz],
+        wallPosition: 0,
+        width: w,
+        height: h,
+        center: toWorldCenter(lx, ly, lz),
+      });
+    };
+    addWall('wall-x-max', 'Wall (East)', localBox.max.x - wallOffset, cy, cz, -1, 0, 0,
+      localBox.max.z - localBox.min.z, localBox.max.y - localBox.min.y);
+    addWall('wall-x-min', 'Wall (West)', localBox.min.x + wallOffset, cy, cz, 1, 0, 0,
+      localBox.max.z - localBox.min.z, localBox.max.y - localBox.min.y);
+    addWall('wall-z-min', 'Wall (North)', cx, cy, localBox.min.z + wallOffset, 0, 0, 1,
+      localBox.max.x - localBox.min.x, localBox.max.y - localBox.min.y);
+    addWall('wall-z-max', 'Wall (South)', cx, cy, localBox.max.z - wallOffset, 0, 0, -1,
+      localBox.max.x - localBox.min.x, localBox.max.y - localBox.min.y);
+    return walls;
+  }
+
+  private getAvailableWallsFromRoomBoundary(): WallInfo[] {
+    const roomBoundary = this.collisionDetector.getRoomBoundary();
+    if (!roomBoundary) return [];
+
+    const min = roomBoundary.min;
+    const max = roomBoundary.max;
+    const wallOffset = 0.02;
+
+    const walls: WallInfo[] = [];
+    walls.push({
+      id: 'wall-x-max',
+      label: 'Wall (East)',
+      wallNormal: [-1, 0, 0],
+      wallPosition: max.x,
+      width: max.z - min.z,
+      height: max.y - min.y,
+      center: [max.x - wallOffset, (min.y + max.y) / 2, (min.z + max.z) / 2],
+    });
+    walls.push({
+      id: 'wall-x-min',
+      label: 'Wall (West)',
+      wallNormal: [1, 0, 0],
+      wallPosition: min.x,
+      width: max.z - min.z,
+      height: max.y - min.y,
+      center: [min.x + wallOffset, (min.y + max.y) / 2, (min.z + max.z) / 2],
+    });
+    walls.push({
+      id: 'wall-z-min',
+      label: 'Wall (North)',
+      wallNormal: [0, 0, 1],
+      wallPosition: min.z,
+      width: max.x - min.x,
+      height: max.y - min.y,
+      center: [(min.x + max.x) / 2, (min.y + max.y) / 2, min.z + wallOffset],
+    });
+    walls.push({
+      id: 'wall-z-max',
+      label: 'Wall (South)',
+      wallNormal: [0, 0, -1],
+      wallPosition: max.z,
+      width: max.x - min.x,
+      height: max.y - min.y,
+      center: [(min.x + max.x) / 2, (min.y + max.y) / 2, max.z - wallOffset],
+    });
+    return walls;
+  }
+
   updateRoomBoundaryFromHomeModel(): void {
     const homeModel = this.homeModel;
     if (!homeModel) return;
@@ -86,6 +216,68 @@ export class SceneManager {
 
   getCollisionDetector(): CollisionDetector {
     return this.collisionDetector;
+  }
+
+  updateRoomBoundaryFromHomeModelWallpaper(): void {
+    if (!this.homeModel) return;
+    const boundary = this.homeModel.getBoundary();
+    if (!boundary) return;
+    const localBox = new THREE.Box3(
+      new THREE.Vector3(boundary.min_x, boundary.min_y, boundary.min_z),
+      new THREE.Vector3(boundary.max_x, boundary.max_y, boundary.max_z)
+    );
+    const homeGroup = this.homeModel.getGroup();
+    homeGroup.updateMatrixWorld(true);
+    const matrix = homeGroup.matrixWorld;
+    const corners = [
+      localBox.min.clone(),
+      localBox.max.clone(),
+      new THREE.Vector3(localBox.min.x, localBox.min.y, localBox.max.z),
+      new THREE.Vector3(localBox.min.x, localBox.max.y, localBox.min.z),
+      new THREE.Vector3(localBox.min.x, localBox.max.y, localBox.max.z),
+      new THREE.Vector3(localBox.max.x, localBox.min.y, localBox.min.z),
+      new THREE.Vector3(localBox.max.x, localBox.min.y, localBox.max.z),
+      new THREE.Vector3(localBox.max.x, localBox.max.y, localBox.min.z),
+    ];
+    const worldCorners = corners.map((c) => c.applyMatrix4(matrix));
+    const worldBox = new THREE.Box3().setFromPoints(worldCorners);
+    this.collisionDetector.setRoomBoundaryFromBox3(worldBox);
+  }
+
+  repositionWallMountedItemsAfterAlignment(): void {
+    const walls = this.getAvailableWalls();
+    if (walls.length === 0) return;
+
+    const matchWallByNormal = (localN: [number, number, number]) => {
+      return walls.find((w) => {
+        const n = w.localNormal ?? w.wallNormal;
+        const dot = localN[0] * n[0] + localN[1] * n[1] + localN[2] * n[2];
+        return dot > 0.99;
+      });
+    };
+
+    this.furnitureItems.forEach((furniture) => {
+      if (!furniture.isOnWall()) return;
+      const placement = furniture.getWallPlacement();
+      if (!placement) return;
+
+      const wall = matchWallByNormal(placement.wallNormal);
+      if (!wall) return;
+
+      furniture.setPosition(wall.center);
+      furniture.setWallPlacement({
+        wallNormal: wall.wallNormal,
+        wallPosition: wall.wallPosition,
+      });
+      if (furniture.isWallpaper?.()) {
+        (furniture as WallpaperItem).reorientPlaneToWall();
+      }
+      this.collisionDetector.updateFurnitureBox(
+        furniture.getId(),
+        furniture.getGroup(),
+        furniture.getModelId()
+      );
+    });
   }
 
   async addFurniture(furniture: FurnitureItem): Promise<boolean> {

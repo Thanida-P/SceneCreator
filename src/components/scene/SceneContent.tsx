@@ -16,12 +16,14 @@ import { ControlPanelToggle } from "../panel/control/ControlPanelToggle";
 import { VRNotificationPanel } from "../panel/common/NotificationPanel";
 import { VRPreciseCollisionPanel } from "../panel/furniture/FurnitureCollisionPanel";
 import { WallPositionPanel, WALL_PANEL_STEP } from "../panel/WallPositionPanel";
+import { WallSelectionPanel } from "../panel/WallSelectionPanel";
 import { VRWhiteboardPanel } from "../panel/VRWhiteboardPanel";
-import { SceneManager } from "../../core/managers/SceneManager";
+import { SceneManager, type WallInfo } from "../../core/managers/SceneManager";
 import {
   FurnitureItem,
   FurnitureMetadata,
 } from "../../core/objects/FurnitureItem";
+import { WallpaperItem } from "../../core/objects/WallpaperItem";
 import { ClockWidget } from "../../core/objects/ClockWidget";
 import { WhiteboardWidget, type WhiteboardTool } from "../../core/objects/WhiteboardWidget";
 import { HomeModel } from "../../core/objects/HomeModel";
@@ -175,6 +177,16 @@ interface SceneState {
   alignmentARModeRequested: boolean;
   waitingForAlignmentConfirmation: boolean;
   legacyManualAlignment: boolean;
+  showWallSelectionPanel: boolean;
+  pendingWallpaperItem: {
+    id: string;
+    name: string;
+    model_id: number;
+    image: string;
+    description?: string;
+    category: string;
+    type: string;
+  } | null;
 }
 
 class SceneContentLogic {
@@ -261,6 +273,8 @@ class SceneContentLogic {
       alignmentARModeRequested: false,
       waitingForAlignmentConfirmation: false,
       legacyManualAlignment: false,
+      showWallSelectionPanel: false,
+      pendingWallpaperItem: null,
       showTexturePanel: false,
       textureOptions: [],
       selectedFurnitureTextureId: undefined,
@@ -519,6 +533,7 @@ class SceneContentLogic {
 
         for (const item of items) {
           if (getBuiltInWidgetType(item)) continue;
+          if (item.category?.toLowerCase() === 'wallpaper' || item.type?.toLowerCase() === 'wallpaper') continue;
           await this.loadFurnitureModel(item.model_id);
         }
       }
@@ -584,6 +599,33 @@ class SceneContentLogic {
               }
               await this.sceneManager.addFurniture(furniture);
             }
+            continue;
+          }
+
+          // Plane for wallpaper creation
+          const isWallpaper = (itemData.category?.toLowerCase() === 'wallpaper' || itemData.type?.toLowerCase() === 'wallpaper');
+          if (isWallpaper && itemData.image) {
+            const sd = itemData.spatialData;
+            const wallPlacement = sd?.wall_placement ?? { wallNormal: [0, 0, -1], wallPosition: 0 };
+            const wallWidth = sd?.wall_width ?? 4;
+            const wallHeight = sd?.wall_height ?? 2.5;
+            const position = sd?.positions ?? [0, 1.25, 0];
+            const wallpaper = new WallpaperItem(
+              itemId,
+              itemData.name,
+              itemData.model_id ?? 0,
+              wallWidth,
+              wallHeight,
+              wallPlacement,
+              itemData.image,
+              {
+                description: itemData.description,
+                category: itemData.category,
+                type: itemData.type,
+              },
+              { position, rotation: sd?.rotation ?? [0, 0, 0], scale: 1 }
+            );
+            await this.sceneManager.addFurniture(wallpaper);
             continue;
           }
 
@@ -1336,6 +1378,10 @@ class SceneContentLogic {
               );
             }
           },
+          (_transform) => {
+            this.sceneManager?.updateRoomBoundaryFromHomeModelWallpaper();
+            this.sceneManager?.repositionWallMountedItemsAfterAlignment();
+          }
         );
         
         this.prevTriggerState.clear();
@@ -1648,6 +1694,10 @@ class SceneContentLogic {
 
     switch (itemId) {
       case "movement":
+        if (this.state.selectedItemId) {
+          const furniture = this.sceneManager?.getFurniture(this.state.selectedItemId);
+          if (furniture?.isWallpaper?.()) break;
+        }
         this.updateState({
           showInstructions: false,
           showFurniture: false,
@@ -1679,6 +1729,7 @@ class SceneContentLogic {
           const furniture = this.sceneManager?.getFurniture(
             this.state.selectedItemId,
           );
+          if (furniture?.isWallpaper?.()) break;
           if (furniture) {
             this.updateState({
               showRotationGizmo: true,
@@ -1892,7 +1943,7 @@ class SceneContentLogic {
     if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
 
     const furniture = this.sceneManager.getFurniture(id);
-    if (!furniture) return;
+    if (!furniture || furniture.isWallpaper?.()) return;
 
     const currentPos = furniture.getPosition();
     const newPos: [number, number, number] = [
@@ -1941,6 +1992,7 @@ class SceneContentLogic {
 
     const furniture = this.sceneManager.getFurniture(id);
     if (!furniture || !furniture.isOnWall()) return;
+    if (furniture.isWallpaper?.()) return;
 
     const result = await this.sceneManager.moveWallFurniture(
       id,
@@ -1970,7 +2022,7 @@ class SceneContentLogic {
     if (!this.sceneManager) return;
 
     const furniture = this.sceneManager.getFurniture(id);
-    if (!furniture) return;
+    if (!furniture || furniture.isWallpaper?.()) return;
 
     const currentRot = furniture.getRotation();
     const newRot: [number, number, number] = [
@@ -2198,6 +2250,33 @@ class SceneContentLogic {
       return;
     }
 
+    // Wallpaper selection panel trigger
+    const isWallpaper = (f.category?.toLowerCase() === 'wallpaper' || f.type?.toLowerCase() === 'wallpaper');
+    if (isWallpaper) {
+      const walls = this.sceneManager.getAvailableWalls();
+      if (walls.length === 0) {
+        this.showNotificationMessage("No walls available in this home", "error");
+        return;
+      }
+      if (!f.image) {
+        this.showNotificationMessage("Wallpaper has no image", "error");
+        return;
+      }
+      this.updateState({
+        showWallSelectionPanel: true,
+        pendingWallpaperItem: {
+          id: f.id,
+          name: f.name,
+          model_id: f.model_id ?? 0,
+          image: f.image,
+          description: f.description,
+          category: f.category ?? 'wallpaper',
+          type: f.type ?? 'wallpaper',
+        },
+      });
+      return;
+    }
+
     const modelPath = this.modelUrlCache.get(f.model_id);
     if (!modelPath) {
       console.warn("Model not loaded yet for:", f.name);
@@ -2240,6 +2319,57 @@ class SceneContentLogic {
           selectedItemPlacementMode: 'floor',
         });
       }
+    });
+  }
+
+  handleSelectWallForWallpaper(wall: WallInfo): void {
+    const pending = this.state.pendingWallpaperItem;
+    if (!pending || !this.sceneManager) return;
+
+    const uniqueId = `${pending.id}-${Date.now()}`;
+    const wallPlacement = {
+      wallNormal: wall.wallNormal,
+      wallPosition: wall.wallPosition,
+    };
+
+    const wallpaper = new WallpaperItem(
+      uniqueId,
+      pending.name,
+      pending.model_id,
+      wall.width,
+      wall.height,
+      wallPlacement,
+      pending.image,
+      {
+        description: pending.description,
+        category: pending.category,
+        type: pending.type,
+      },
+      {
+        position: wall.center,
+        rotation: [0, 0, 0],
+        scale: 1,
+      }
+    );
+
+    this.sceneManager.addFurniture(wallpaper).then(() => {
+      this.sceneManager!.selectFurniture(uniqueId);
+      this.furnitureController?.setSelectedFurniture(uniqueId);
+      this.updateState({
+        selectedItemId: uniqueId,
+        showSlider: false,
+        selectedItemPlacementMode: 'wall',
+        showWallSelectionPanel: false,
+        pendingWallpaperItem: null,
+      });
+      this.showNotificationMessage("Wallpaper added!", "success");
+    });
+  }
+
+  handleCancelWallSelection(): void {
+    this.updateState({
+      showWallSelectionPanel: false,
+      pendingWallpaperItem: null,
     });
   }
 
@@ -2291,8 +2421,9 @@ class SceneContentLogic {
       const scaleValue = typeof scale === "number" ? scale : scale[0];
 
     // Show gizmo based on current sidebar mode
-    const showMovementGizmo = this.state.sidebarActiveItem === 'movement';
-    const showRotGizmo = this.state.sidebarActiveItem === 'rotation';
+    const isWallpaper = furniture.isWallpaper?.() ?? false;
+    const showMovementGizmo = !isWallpaper && this.state.sidebarActiveItem === 'movement';
+    const showRotGizmo = !isWallpaper && this.state.sidebarActiveItem === 'rotation';
     const isTextureMode = this.state.sidebarActiveItem === "texture";
 
     // Track wall-mountable state
@@ -2384,7 +2515,7 @@ class SceneContentLogic {
   handleGizmoMove(axis: "x" | "y" | "z", delta: number): void {
     if (!this.state.selectedItemId || !this.sceneManager) return;
     const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
-    if (!furniture) return;
+    if (!furniture || furniture.isWallpaper?.()) return;
     const currentPos = furniture.getPosition();
     const newPos: [number, number, number] = [...currentPos];
     switch (axis) {
@@ -2436,7 +2567,10 @@ class SceneContentLogic {
       deltaInOut,
     );
     if (result.needsUnmountConfirm) {
-      this.updateState({ showUnmountPanel: true });
+      const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
+      if (!furniture?.isWallpaper?.()) {
+        this.updateState({ showUnmountPanel: true });
+      }
     } else if (result.success) {
       const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
       if (furniture) {
@@ -2456,6 +2590,7 @@ class SceneContentLogic {
     if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
 
     const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
+    if (furniture?.isWallpaper?.()) return;
     if (!furniture) {
       console.warn(
         `[handleGizmoRotate] Furniture not found:`,
@@ -2800,6 +2935,8 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     alignmentARModeRequested: false,
     waitingForAlignmentConfirmation: false,
     legacyManualAlignment: false,
+    showWallSelectionPanel: false,
+    pendingWallpaperItem: null,
     experienceMode: false,
     experienceWhiteboardId: null,
     whiteboardTool: "pen",
@@ -3243,6 +3380,19 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       <HeadLockedUI
         distance={1.5}
         verticalOffset={0}
+        enabled={state.showWallSelectionPanel}
+      >
+        <WallSelectionPanel
+          show={state.showWallSelectionPanel}
+          walls={logic.sceneManager?.getAvailableWalls() ?? []}
+          wallpaperName={state.pendingWallpaperItem?.name ?? ""}
+          onSelectWall={(wall) => logic.handleSelectWallForWallpaper(wall)}
+          onCancel={() => logic.handleCancelWallSelection()}
+        />
+      </HeadLockedUI>
+      <HeadLockedUI
+        distance={1.5}
+        verticalOffset={0}
         enabled={state.showWallPanel}
       >
         {state.selectedItemId && (
@@ -3283,7 +3433,8 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
             show={state.showSidebar && !state.experienceMode}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
             extraItems={
-              state.selectedItemId && logic.sceneManager?.isWallMounted(state.selectedItemId)
+              state.selectedItemId &&
+              logic.sceneManager?.isWallMounted(state.selectedItemId)
                 ? [
                     {
                       id: "wall",
@@ -3293,6 +3444,12 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
                       description: "Move in/out from wall",
                     },
                   ]
+                : undefined
+            }
+            hiddenItemIds={
+              state.selectedItemId &&
+              logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
+                ? ["movement", "rotation"]
                 : undefined
             }
           />
