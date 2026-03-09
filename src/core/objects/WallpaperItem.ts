@@ -141,4 +141,80 @@ export class WallpaperItem extends FurnitureItem {
     });
     super.dispose();
   }
+
+  getPlaneMesh(): THREE.Mesh<THREE.PlaneGeometry> | null {
+    let found: THREE.Mesh<THREE.PlaneGeometry> | null = null;
+    this.modelGroup.traverse((child) => {
+      if (!found && child instanceof THREE.Mesh && child.geometry?.type === 'PlaneGeometry') {
+        found = child as THREE.Mesh<THREE.PlaneGeometry>;
+      }
+    });
+    return found;
+  }
+
+  //Set plane material opacity
+  setMaterialOpacity(opacity: number): void {
+    this.modelGroup.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material) {
+        const mat = child.material as THREE.MeshBasicMaterial;
+        mat.transparent = opacity < 1;
+        mat.opacity = opacity;
+      }
+    });
+  }
+
+  // Cutout implementation
+  applyCutouts(holes: { x: number; y: number; width: number; height: number }[]): void {
+    const w = this.wallWidth;
+    const h = this.wallHeight;
+    const hw = w / 2;
+    const hh = h / 2;
+
+    const shape = new THREE.Shape();
+    shape.moveTo(-hw, -hh);
+    shape.lineTo(hw, -hh);
+    shape.lineTo(hw, hh);
+    shape.lineTo(-hw, hh);
+    shape.closePath();
+
+    for (const hole of holes) {
+      const x1 = hole.x;
+      const y1 = hole.y;
+      const x2 = hole.x + hole.width;
+      const y2 = hole.y + hole.height;
+      const path = new THREE.Path();
+      path.moveTo(x1, y1);
+      path.lineTo(x1, y2);
+      path.lineTo(x2, y2);
+      path.lineTo(x2, y1);
+      path.closePath();
+      shape.holes.push(path);
+    }
+
+    const geom = new THREE.ShapeGeometry(shape);
+
+    this.modelGroup.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.geometry?.type === 'PlaneGeometry') {
+        const mesh = child as THREE.Mesh<THREE.BufferGeometry>;
+        mesh.geometry.dispose();
+        mesh.geometry = geom;
+        this.applyPlaneUVsToGeometry(geom, w, h);
+      }
+    });
+  }
+
+  private applyPlaneUVsToGeometry(geometry: THREE.BufferGeometry, w: number, h: number): void {
+    const pos = geometry.attributes.position;
+    if (!pos) return;
+    const count = pos.count;
+    const uvs = new Float32Array(count * 2);
+    for (let i = 0; i < count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      uvs[i * 2] = (x / w) + 0.5;
+      uvs[i * 2 + 1] = (y / h) + 0.5;
+    }
+    geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geometry.attributes.uv!.needsUpdate = true;
+  }
 }
