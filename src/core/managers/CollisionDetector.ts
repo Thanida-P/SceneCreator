@@ -67,6 +67,10 @@ export class CollisionDetector {
     );
   }
 
+  setRoomBoundaryFromBox3(box: THREE.Box3): void {
+    this.roomBox = box.clone();
+  }
+
   getRoomBoundary(): THREE.Box3 | null {
     return this.roomBox;
   }

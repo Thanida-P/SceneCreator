@@ -16,12 +16,17 @@ import { ControlPanelToggle } from "../panel/control/ControlPanelToggle";
 import { VRNotificationPanel } from "../panel/common/NotificationPanel";
 import { VRPreciseCollisionPanel } from "../panel/furniture/FurnitureCollisionPanel";
 import { WallPositionPanel, WALL_PANEL_STEP } from "../panel/WallPositionPanel";
+import { WallSelectionPanel } from "../panel/WallSelectionPanel";
+import { WallpaperCutoutPanel } from "../panel/WallpaperCutoutPanel";
+import { WallpaperLassoOverlay } from "./WallpaperLassoOverlay";
+import { WallpaperLassoPointerRaycast } from "./WallpaperLassoPointerRaycast";
 import { VRWhiteboardPanel } from "../panel/VRWhiteboardPanel";
-import { SceneManager } from "../../core/managers/SceneManager";
+import { SceneManager, type WallInfo } from "../../core/managers/SceneManager";
 import {
   FurnitureItem,
   FurnitureMetadata,
 } from "../../core/objects/FurnitureItem";
+import { WallpaperItem } from "../../core/objects/WallpaperItem";
 import { ClockWidget } from "../../core/objects/ClockWidget";
 import { WhiteboardWidget, type WhiteboardTool } from "../../core/objects/WhiteboardWidget";
 import { HomeModel } from "../../core/objects/HomeModel";
@@ -175,6 +180,24 @@ interface SceneState {
   alignmentARModeRequested: boolean;
   waitingForAlignmentConfirmation: boolean;
   legacyManualAlignment: boolean;
+  showWallSelectionPanel: boolean;
+  pendingWallpaperItem: {
+    id: string;
+    name: string;
+    model_id: number;
+    image: string;
+    description?: string;
+    category: string;
+    type: string;
+  } | null;
+  wallpaperCutoutState: {
+    wallpaperId: string;
+    step: 'prompt' | 'drawing';
+    lassoRegions: { x: number; y: number; width: number; height: number }[];
+  } | null;
+  lassoStart: { x: number; y: number } | null;
+  lassoPreview: { x: number; y: number; width: number; height: number } | null;
+  isLassoDrawing: boolean;
 }
 
 class SceneContentLogic {
@@ -205,6 +228,7 @@ class SceneContentLogic {
 
   private textureCache: Map<string, TextureOption[]> = new Map();
   private textureLoadingCache: Map<string, Promise<void>> = new Map();
+  public lassoHandledByPrimitiveRef: { current: boolean } | null = null;
 
   constructor(
     homeId: string,
@@ -261,6 +285,12 @@ class SceneContentLogic {
       alignmentARModeRequested: false,
       waitingForAlignmentConfirmation: false,
       legacyManualAlignment: false,
+      showWallSelectionPanel: false,
+      pendingWallpaperItem: null,
+      wallpaperCutoutState: null,
+      lassoStart: null,
+      lassoPreview: null,
+      isLassoDrawing: false,
       showTexturePanel: false,
       textureOptions: [],
       selectedFurnitureTextureId: undefined,
@@ -519,6 +549,7 @@ class SceneContentLogic {
 
         for (const item of items) {
           if (getBuiltInWidgetType(item)) continue;
+          if (item.category?.toLowerCase() === 'wallpaper' || item.type?.toLowerCase() === 'wallpaper') continue;
           await this.loadFurnitureModel(item.model_id);
         }
       }
@@ -584,6 +615,33 @@ class SceneContentLogic {
               }
               await this.sceneManager.addFurniture(furniture);
             }
+            continue;
+          }
+
+          // Plane for wallpaper creation
+          const isWallpaper = (itemData.category?.toLowerCase() === 'wallpaper' || itemData.type?.toLowerCase() === 'wallpaper');
+          if (isWallpaper && itemData.image) {
+            const sd = itemData.spatialData;
+            const wallPlacement = sd?.wall_placement ?? { wallNormal: [0, 0, -1], wallPosition: 0 };
+            const wallWidth = sd?.wall_width ?? 4;
+            const wallHeight = sd?.wall_height ?? 2.5;
+            const position = sd?.positions ?? [0, 1.25, 0];
+            const wallpaper = new WallpaperItem(
+              itemId,
+              itemData.name,
+              itemData.model_id ?? 0,
+              wallWidth,
+              wallHeight,
+              wallPlacement,
+              itemData.image,
+              {
+                description: itemData.description,
+                category: itemData.category,
+                type: itemData.type,
+              },
+              { position, rotation: sd?.rotation ?? [0, 0, 0], scale: 1 }
+            );
+            await this.sceneManager.addFurniture(wallpaper);
             continue;
           }
 
@@ -1336,6 +1394,10 @@ class SceneContentLogic {
               );
             }
           },
+          (_transform) => {
+            this.sceneManager?.updateRoomBoundaryFromHomeModelWallpaper();
+            this.sceneManager?.repositionWallMountedItemsAfterAlignment();
+          }
         );
         
         this.prevTriggerState.clear();
@@ -1648,6 +1710,10 @@ class SceneContentLogic {
 
     switch (itemId) {
       case "movement":
+        if (this.state.selectedItemId) {
+          const furniture = this.sceneManager?.getFurniture(this.state.selectedItemId);
+          if (furniture?.isWallpaper?.()) break;
+        }
         this.updateState({
           showInstructions: false,
           showFurniture: false,
@@ -1679,6 +1745,7 @@ class SceneContentLogic {
           const furniture = this.sceneManager?.getFurniture(
             this.state.selectedItemId,
           );
+          if (furniture?.isWallpaper?.()) break;
           if (furniture) {
             this.updateState({
               showRotationGizmo: true,
@@ -1892,7 +1959,7 @@ class SceneContentLogic {
     if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
 
     const furniture = this.sceneManager.getFurniture(id);
-    if (!furniture) return;
+    if (!furniture || furniture.isWallpaper?.()) return;
 
     const currentPos = furniture.getPosition();
     const newPos: [number, number, number] = [
@@ -1941,6 +2008,7 @@ class SceneContentLogic {
 
     const furniture = this.sceneManager.getFurniture(id);
     if (!furniture || !furniture.isOnWall()) return;
+    if (furniture.isWallpaper?.()) return;
 
     const result = await this.sceneManager.moveWallFurniture(
       id,
@@ -1970,7 +2038,7 @@ class SceneContentLogic {
     if (!this.sceneManager) return;
 
     const furniture = this.sceneManager.getFurniture(id);
-    if (!furniture) return;
+    if (!furniture || furniture.isWallpaper?.()) return;
 
     const currentRot = furniture.getRotation();
     const newRot: [number, number, number] = [
@@ -2198,6 +2266,33 @@ class SceneContentLogic {
       return;
     }
 
+    // Wallpaper selection panel trigger
+    const isWallpaper = (f.category?.toLowerCase() === 'wallpaper' || f.type?.toLowerCase() === 'wallpaper');
+    if (isWallpaper) {
+      const walls = this.sceneManager.getAvailableWalls();
+      if (walls.length === 0) {
+        this.showNotificationMessage("No walls available in this home", "error");
+        return;
+      }
+      if (!f.image) {
+        this.showNotificationMessage("Wallpaper has no image", "error");
+        return;
+      }
+      this.updateState({
+        showWallSelectionPanel: true,
+        pendingWallpaperItem: {
+          id: f.id,
+          name: f.name,
+          model_id: f.model_id ?? 0,
+          image: f.image,
+          description: f.description,
+          category: f.category ?? 'wallpaper',
+          type: f.type ?? 'wallpaper',
+        },
+      });
+      return;
+    }
+
     const modelPath = this.modelUrlCache.get(f.model_id);
     if (!modelPath) {
       console.warn("Model not loaded yet for:", f.name);
@@ -2240,6 +2335,200 @@ class SceneContentLogic {
           selectedItemPlacementMode: 'floor',
         });
       }
+    });
+  }
+
+  handleSelectWallForWallpaper(wall: WallInfo): void {
+    const pending = this.state.pendingWallpaperItem;
+    if (!pending || !this.sceneManager) return;
+
+    const uniqueId = `${pending.id}-${Date.now()}`;
+    const wallPlacement = {
+      wallNormal: wall.wallNormal,
+      wallPosition: wall.wallPosition,
+    };
+
+    const wallpaper = new WallpaperItem(
+      uniqueId,
+      pending.name,
+      pending.model_id,
+      wall.width,
+      wall.height,
+      wallPlacement,
+      pending.image,
+      {
+        description: pending.description,
+        category: pending.category,
+        type: pending.type,
+      },
+      {
+        position: wall.center,
+        rotation: [0, 0, 0],
+        scale: 1,
+      }
+    );
+
+    this.sceneManager.addFurniture(wallpaper).then(() => {
+      this.sceneManager!.selectFurniture(uniqueId);
+      this.furnitureController?.setSelectedFurniture(uniqueId);
+      this.updateState({
+        selectedItemId: uniqueId,
+        showSlider: false,
+        selectedItemPlacementMode: 'wall',
+        showWallSelectionPanel: false,
+        pendingWallpaperItem: null,
+        wallpaperCutoutState: { wallpaperId: uniqueId, step: 'prompt', lassoRegions: [] },
+      });
+      this.showNotificationMessage("Wallpaper added!", "success");
+    });
+  }
+
+  handleCancelWallSelection(): void {
+    this.updateState({
+      showWallSelectionPanel: false,
+      pendingWallpaperItem: null,
+    });
+  }
+
+  handleWallpaperCutoutYes(): void {
+    const cutout = this.state.wallpaperCutoutState;
+    if (!cutout || !this.sceneManager) return;
+    const wallpaper = this.sceneManager.getFurniture(cutout.wallpaperId) as WallpaperItem | undefined;
+    if (wallpaper?.isWallpaper?.()) {
+      wallpaper.setMaterialOpacity(0.5);
+      this.updateState({
+        wallpaperCutoutState: { ...cutout, step: 'drawing' },
+      });
+    }
+  }
+
+  handleWallpaperCutoutNo(): void {
+    this.updateState({
+      wallpaperCutoutState: null,
+      lassoStart: null,
+      lassoPreview: null,
+      isLassoDrawing: false,
+    });
+  }
+
+  handleWallpaperCutoutUndo(): void {
+    const cutout = this.state.wallpaperCutoutState;
+    if (!cutout || cutout.lassoRegions.length === 0) return;
+    const next = cutout.lassoRegions.slice(0, -1);
+    this.updateState({
+      wallpaperCutoutState: { ...cutout, lassoRegions: next },
+    });
+  }
+
+  handleWallpaperCutoutConfirm(): void {
+    const cutout = this.state.wallpaperCutoutState;
+    if (!cutout || !this.sceneManager) return;
+    const wallpaper = this.sceneManager.getFurniture(cutout.wallpaperId) as WallpaperItem | undefined;
+    if (wallpaper?.isWallpaper?.()) {
+      if (cutout.lassoRegions.length > 0) {
+        wallpaper.applyCutouts(cutout.lassoRegions);
+      }
+      wallpaper.setMaterialOpacity(1);
+    }
+    this.updateState({
+      wallpaperCutoutState: null,
+      lassoStart: null,
+      lassoPreview: null,
+      isLassoDrawing: false,
+    });
+    this.showNotificationMessage("Cut-outs applied.", "success");
+  }
+
+  handleWallpaperLassoPoint(localPoint: { x: number; y: number }): void {
+    const cutout = this.state.wallpaperCutoutState;
+    if (!cutout || cutout.step !== 'drawing') return;
+    const first = this.state.lassoStart;
+    if (first == null) {
+      this.updateState({
+        lassoStart: { x: localPoint.x, y: localPoint.y },
+        isLassoDrawing: true,
+        lassoPreview: { x: localPoint.x, y: localPoint.y, width: 0, height: 0 },
+      });
+    } else {
+      const x = Math.min(first.x, localPoint.x);
+      const y = Math.min(first.y, localPoint.y);
+      const width = Math.abs(localPoint.x - first.x);
+      const height = Math.abs(localPoint.y - first.y);
+      const minSize = 0.05;
+      const newRegion = width >= minSize && height >= minSize ? { x, y, width, height } : null;
+      this.updateState({
+        lassoStart: null,
+        isLassoDrawing: false,
+        lassoPreview: null,
+        wallpaperCutoutState: newRegion
+          ? { ...cutout, lassoRegions: [...cutout.lassoRegions, newRegion] }
+          : cutout,
+      });
+    }
+  }
+
+  handleWallpaperLassoPointerDown(e: any, furniture: FurnitureItem): void {
+    const cutout = this.state.wallpaperCutoutState;
+    if (!cutout || cutout.step !== 'drawing' || cutout.wallpaperId !== furniture.getId()) return;
+    const wallpaper = furniture as WallpaperItem;
+    const plane = wallpaper.getPlaneMesh();
+    if (!plane) return;
+    const local = new THREE.Vector3().copy(e.point);
+    plane.worldToLocal(local);
+    e.stopPropagation();
+    if (e.target?.setPointerCapture) e.target.setPointerCapture(e.pointerId);
+    this.updateState({
+      lassoStart: { x: local.x, y: local.y },
+      isLassoDrawing: true,
+      lassoPreview: null,
+    });
+  }
+
+  handleWallpaperLassoPointerMove(e: any, furniture: FurnitureItem): void {
+    if (!this.state.isLassoDrawing || this.state.lassoStart == null) return;
+    const cutout = this.state.wallpaperCutoutState;
+    if (!cutout || cutout.wallpaperId !== furniture.getId()) return;
+    const wallpaper = furniture as WallpaperItem;
+    const plane = wallpaper.getPlaneMesh();
+    if (!plane) return;
+    const local = new THREE.Vector3().copy(e.point);
+    plane.worldToLocal(local);
+    const start = this.state.lassoStart;
+    const x = Math.min(start.x, local.x);
+    const y = Math.min(start.y, local.y);
+    const width = Math.abs(local.x - start.x);
+    const height = Math.abs(local.y - start.y);
+    this.updateState({
+      lassoPreview: { x, y, width, height },
+    });
+  }
+
+  handleWallpaperLassoPointerUp(e: any, furniture: FurnitureItem): void {
+    if (!this.state.isLassoDrawing || this.state.lassoStart == null) return;
+    const cutout = this.state.wallpaperCutoutState;
+    if (!cutout || cutout.wallpaperId !== furniture.getId()) return;
+    const wallpaper = furniture as WallpaperItem;
+    const plane = wallpaper.getPlaneMesh();
+    if (!plane) return;
+    const local = new THREE.Vector3().copy(e.point);
+    plane.worldToLocal(local);
+    const start = this.state.lassoStart!;
+    const x = Math.min(start.x, local.x);
+    const y = Math.min(start.y, local.y);
+    const width = Math.abs(local.x - start.x);
+    const height = Math.abs(local.y - start.y);
+    if (e.target?.releasePointerCapture) e.target.releasePointerCapture(e.pointerId);
+    const minSize = 0.05;
+    const newRegion = width >= minSize && height >= minSize
+      ? { x, y, width, height }
+      : null;
+    this.updateState({
+      lassoStart: null,
+      isLassoDrawing: false,
+      lassoPreview: null,
+      wallpaperCutoutState: newRegion
+        ? { ...cutout, lassoRegions: [...cutout.lassoRegions, newRegion] }
+        : cutout,
     });
   }
 
@@ -2291,8 +2580,9 @@ class SceneContentLogic {
       const scaleValue = typeof scale === "number" ? scale : scale[0];
 
     // Show gizmo based on current sidebar mode
-    const showMovementGizmo = this.state.sidebarActiveItem === 'movement';
-    const showRotGizmo = this.state.sidebarActiveItem === 'rotation';
+    const isWallpaper = furniture.isWallpaper?.() ?? false;
+    const showMovementGizmo = !isWallpaper && this.state.sidebarActiveItem === 'movement';
+    const showRotGizmo = !isWallpaper && this.state.sidebarActiveItem === 'rotation';
     const isTextureMode = this.state.sidebarActiveItem === "texture";
 
     // Track wall-mountable state
@@ -2384,7 +2674,7 @@ class SceneContentLogic {
   handleGizmoMove(axis: "x" | "y" | "z", delta: number): void {
     if (!this.state.selectedItemId || !this.sceneManager) return;
     const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
-    if (!furniture) return;
+    if (!furniture || furniture.isWallpaper?.()) return;
     const currentPos = furniture.getPosition();
     const newPos: [number, number, number] = [...currentPos];
     switch (axis) {
@@ -2436,7 +2726,10 @@ class SceneContentLogic {
       deltaInOut,
     );
     if (result.needsUnmountConfirm) {
-      this.updateState({ showUnmountPanel: true });
+      const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
+      if (!furniture?.isWallpaper?.()) {
+        this.updateState({ showUnmountPanel: true });
+      }
     } else if (result.success) {
       const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
       if (furniture) {
@@ -2456,6 +2749,7 @@ class SceneContentLogic {
     if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
 
     const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
+    if (furniture?.isWallpaper?.()) return;
     if (!furniture) {
       console.warn(
         `[handleGizmoRotate] Furniture not found:`,
@@ -2800,12 +3094,19 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     alignmentARModeRequested: false,
     waitingForAlignmentConfirmation: false,
     legacyManualAlignment: false,
+    showWallSelectionPanel: false,
+    pendingWallpaperItem: null,
+    wallpaperCutoutState: null,
+    lassoStart: null,
+    lassoPreview: null,
+    isLassoDrawing: false,
     experienceMode: false,
     experienceWhiteboardId: null,
     whiteboardTool: "pen",
   });
 
   const logicRef = useRef<SceneContentLogic | null>(null);
+  const lassoHandledByPrimitiveRef = useRef(false);
 
   useEffect(() => {
     const updateState = (
@@ -2818,6 +3119,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     };
 
     logicRef.current = new SceneContentLogic(homeId, navigate, updateState);
+    logicRef.current.lassoHandledByPrimitiveRef = lassoHandledByPrimitiveRef;
     logicRef.current.initializeManagers(scene);
     logicRef.current.setXRStore(xrStore);
 
@@ -2961,6 +3263,9 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
               isWhiteboard ? (furniture as WhiteboardWidget).getBoardMesh?.() ?? null : null;
 
             const handleFurnitureClick = (e: any) => {
+              if (state.wallpaperCutoutState?.step === "drawing" && state.wallpaperCutoutState?.wallpaperId === furniture.getId()) {
+                return;
+              }
               let target = e.object;
               let isGizmoClick = false;
               let depth = 0;
@@ -2992,12 +3297,47 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
               }
             };
 
+            const isCutoutDrawingWallpaper =
+              state.wallpaperCutoutState?.step === "drawing" &&
+              state.wallpaperCutoutState?.wallpaperId === furniture.getId() &&
+              furniture.isWallpaper?.();
+
+            const handlePointerDown = (e: any) => {
+              if (isCutoutDrawingWallpaper) {
+                e.stopPropagation();
+                const wallpaper = furniture as WallpaperItem;
+                const plane = wallpaper.getPlaneMesh();
+                if (plane) {
+                  const local = new THREE.Vector3().copy(e.point);
+                  plane.worldToLocal(local);
+                  if (logic.lassoHandledByPrimitiveRef) logic.lassoHandledByPrimitiveRef.current = true;
+                  logic.handleWallpaperLassoPoint({ x: local.x, y: local.y });
+                }
+                return;
+              }
+              handleFurnitureClick(e);
+            };
+
+            const handlePointerMove = (e: any) => {
+              if (state.isLassoDrawing && state.wallpaperCutoutState?.wallpaperId === furniture.getId()) {
+                logic.handleWallpaperLassoPointerMove(e, furniture);
+              }
+            };
+
+            const handlePointerUp = (e: any) => {
+              if (state.isLassoDrawing && state.wallpaperCutoutState?.wallpaperId === furniture.getId()) {
+                logic.handleWallpaperLassoPointerUp(e, furniture);
+              }
+            };
+
             return (
               <React.Fragment key={furniture.getId()}>
                 <primitive
                   object={furniture.getGroup()}
                   onClick={handleFurnitureClick}
-                  onPointerDown={handleFurnitureClick}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
                 />
                 {isWhiteboard && state.experienceMode && boardMesh && (
                   <WhiteboardHitTarget
@@ -3013,6 +3353,35 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
               </React.Fragment>
             );
           })}
+
+          {state.wallpaperCutoutState?.step === "drawing" && state.wallpaperCutoutState?.wallpaperId && (
+            <WallpaperLassoPointerRaycast
+              active={state.wallpaperCutoutState.step === "drawing"}
+              getPlaneMesh={() => {
+                const id = state.wallpaperCutoutState?.wallpaperId;
+                if (!id || !logic.sceneManager) return null;
+                const f = logic.sceneManager.getFurniture(id);
+                return (f as WallpaperItem)?.getPlaneMesh() ?? null;
+              }}
+              lassoFirstCorner={state.lassoStart}
+              onUpdatePreview={(rect) => logic.updateState({ lassoPreview: rect })}
+              onLassoPoint={(localPoint) => logic.handleWallpaperLassoPoint(localPoint)}
+              lassoHandledByPrimitiveRef={lassoHandledByPrimitiveRef}
+            />
+          )}
+          {state.wallpaperCutoutState?.step === "drawing" && state.wallpaperCutoutState?.wallpaperId && (
+            <WallpaperLassoOverlay
+              getPlaneMesh={() => {
+                const id = state.wallpaperCutoutState?.wallpaperId;
+                if (!id || !logic.sceneManager) return null;
+                const f = logic.sceneManager.getFurniture(id);
+                return (f as WallpaperItem)?.getPlaneMesh() ?? null;
+              }}
+              lassoRegions={state.wallpaperCutoutState.lassoRegions}
+              previewRect={state.lassoPreview}
+              visible={!!state.wallpaperCutoutState}
+            />
+          )}
 
             {state.showTransformGizmo && state.gizmoPosition && (
               <TransformGizmo
@@ -3243,6 +3612,40 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       <HeadLockedUI
         distance={1.5}
         verticalOffset={0}
+        enabled={state.showWallSelectionPanel}
+      >
+        <WallSelectionPanel
+          show={state.showWallSelectionPanel}
+          walls={logic.sceneManager?.getAvailableWalls() ?? []}
+          wallpaperName={state.pendingWallpaperItem?.name ?? ""}
+          onSelectWall={(wall) => logic.handleSelectWallForWallpaper(wall)}
+          onCancel={() => logic.handleCancelWallSelection()}
+        />
+      </HeadLockedUI>
+      <HeadLockedUI
+        distance={1.5}
+        verticalOffset={0}
+        enabled={!!state.wallpaperCutoutState}
+      >
+        <WallpaperCutoutPanel
+          show={!!state.wallpaperCutoutState}
+          step={state.wallpaperCutoutState?.step ?? "prompt"}
+          wallpaperName={
+            state.wallpaperCutoutState && logic.sceneManager
+              ? (logic.sceneManager.getFurniture(state.wallpaperCutoutState.wallpaperId)?.getName() ?? "")
+              : ""
+          }
+          lassoRegions={state.wallpaperCutoutState?.lassoRegions ?? []}
+          panelOpacity={state.wallpaperCutoutState?.step === "drawing" ? 0.5 : 0.95}
+          onYes={() => logic.handleWallpaperCutoutYes()}
+          onNo={() => logic.handleWallpaperCutoutNo()}
+          onUndo={() => logic.handleWallpaperCutoutUndo()}
+          onConfirm={() => logic.handleWallpaperCutoutConfirm()}
+        />
+      </HeadLockedUI>
+      <HeadLockedUI
+        distance={1.5}
+        verticalOffset={0}
         enabled={state.showWallPanel}
       >
         {state.selectedItemId && (
@@ -3283,7 +3686,8 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
             show={state.showSidebar && !state.experienceMode}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
             extraItems={
-              state.selectedItemId && logic.sceneManager?.isWallMounted(state.selectedItemId)
+              state.selectedItemId &&
+              logic.sceneManager?.isWallMounted(state.selectedItemId)
                 ? [
                     {
                       id: "wall",
@@ -3293,6 +3697,12 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
                       description: "Move in/out from wall",
                     },
                   ]
+                : undefined
+            }
+            hiddenItemIds={
+              state.selectedItemId &&
+              logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
+                ? ["movement", "rotation"]
                 : undefined
             }
           />

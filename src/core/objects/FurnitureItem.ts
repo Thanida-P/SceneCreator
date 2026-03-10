@@ -76,6 +76,10 @@ export class FurnitureItem extends Base3DObject {
     return this.wallPlacement;
   }
 
+  isWallpaper(): boolean {
+    return false;
+  }
+
   // Move along wall surface
   moveAlongWall(deltaVertical: number, deltaHorizontal: number): [number, number, number] {
     const currentPos = this.getPosition();

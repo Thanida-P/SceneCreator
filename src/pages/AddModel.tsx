@@ -58,8 +58,8 @@ export function AddModel() {
 
   const handleCustomItemSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!itemName || !itemModelFile) {
-      setMessage({ type: "error", text: "Name and model file are required." });
+    if (!itemName) {
+      setMessage({ type: "error", text: "Name is required." });
       return;
     }
 
@@ -72,7 +72,7 @@ export function AddModel() {
     formData.append("type", type);
     formData.append("is_container", String(isContainer));
     formData.append("wall_mountable", String(wallMountable));
-    formData.append("model_file", itemModelFile);
+    if (itemModelFile) formData.append("model_file", itemModelFile);
     if (itemTextureFiles) Array.from(itemTextureFiles).forEach((f) => formData.append("texture_files", f));
     if (itemImage) formData.append("image", itemImage);
 
