@@ -362,10 +362,11 @@ export class FurnitureItem extends Base3DObject {
   serialize(): Record<string, unknown> {
     const scale = this.getScale();
     const scaleArray = typeof scale === 'number' ? [scale, scale, scale] : scale;
+    const positions = [...this.getPosition(), 0] as [number, number, number, number];
 
     return {
       id: this.id,
-      position: [...this.getPosition(), 0],
+      positions,
       rotation: this.getRotation(),
       scale: scaleArray,
       is_container: this.isContainerType(),
