@@ -122,6 +122,9 @@ interface SceneContentProps {
         min_z: number;
         max_z: number;
       };
+      positions?: number[];
+      rotation?: number[];
+      scale?: number | number[];
     };
   };
   arModeRequested?: boolean;
@@ -229,6 +232,7 @@ class SceneContentLogic {
   private cornerSelectionReady: boolean = false;
   private alignmentReady: boolean = false;
   private initialXRMode: 'vr' | 'ar' | null = null;
+  private homeWorldMatrixBeforeAlignment: THREE.Matrix4 | null = null;
 
   private textureCache: Map<string, TextureOption[]> = new Map();
   private textureLoadingCache: Map<string, Promise<void>> = new Map();
@@ -499,6 +503,38 @@ class SceneContentLogic {
     });
   }
 
+  private applySavedHomeSpatialData(digitalHome?: SceneContentProps["digitalHome"]): void {
+    const home = this.sceneManager?.getHomeModel();
+    if (!home || !digitalHome?.spatialData) return;
+
+    const sd = digitalHome.spatialData;
+    if (sd.positions && Array.isArray(sd.positions) && sd.positions.length >= 3) {
+      home.setPosition([
+        Number(sd.positions[0]),
+        Number(sd.positions[1]),
+        Number(sd.positions[2]),
+      ]);
+    }
+    if (sd.rotation && Array.isArray(sd.rotation) && sd.rotation.length >= 3) {
+      home.setRotation([
+        Number(sd.rotation[0]),
+        Number(sd.rotation[1]),
+        Number(sd.rotation[2]),
+      ]);
+    }
+    if (sd.scale !== undefined && sd.scale !== null) {
+      if (Array.isArray(sd.scale)) {
+        if (sd.scale.length >= 3) {
+          home.setScale([Number(sd.scale[0]), Number(sd.scale[1]), Number(sd.scale[2])]);
+        } else if (sd.scale.length >= 1) {
+          home.setScale(Number(sd.scale[0]));
+        }
+      } else if (typeof sd.scale === "number") {
+        home.setScale(sd.scale);
+      }
+    }
+  }
+
   async loadHome(digitalHome?: any): Promise<void> {
     if (!this.sceneManager) return;
 
@@ -520,6 +556,8 @@ class SceneContentLogic {
         );
 
         await this.sceneManager.setHomeModel(homeModel);
+        this.applySavedHomeSpatialData(digitalHome);
+        this.sceneManager.updateRoomBoundaryFromHomeModel();
         this.debugHomeModelStructure();
       }
     } catch (error) {
@@ -603,10 +641,19 @@ class SceneContentLogic {
           const widgetType = getBuiltInWidgetType(itemData);
           if (widgetType) {
             const sd = itemData.spatialData;
+            const interp = this.sceneManager.interpretSpatialDataForLoad(
+              sd as Record<string, unknown> | undefined,
+            );
+            const scaleRaw = sd?.scale;
+            const scaleVal = Array.isArray(scaleRaw)
+              ? Number(scaleRaw[0] ?? 1)
+              : typeof scaleRaw === "number"
+                ? scaleRaw
+                : 1;
             const initialTransform = {
-              position: sd?.positions ?? [0, 0, 0],
-              rotation: sd?.rotation ?? [0, 0, 0],
-              scale: sd?.scale?.[0] ?? 1,
+              position: interp.position,
+              rotation: interp.rotation,
+              scale: scaleVal,
             };
             let furniture;
             if (widgetType === "clock") {
@@ -617,10 +664,16 @@ class SceneContentLogic {
               furniture = new WeatherWidget(itemId, initialTransform);
             }
             if (furniture) {
-              if (sd?.placement_mode === 'wall' && sd?.wall_placement) {
-                furniture.setWallPlacement(sd.wall_placement);
+              if (sd?.placement_mode === "wall" && interp.wallPlacement) {
+                furniture.setWallPlacement(interp.wallPlacement);
               }
               await this.sceneManager.addFurniture(furniture);
+              if (sd) {
+                this.sceneManager.registerDeployedSpatialSnapshot(
+                  itemId,
+                  sd as Record<string, unknown>,
+                );
+              }
             }
             continue;
           }
@@ -629,10 +682,15 @@ class SceneContentLogic {
           const isWallpaper = (itemData.category?.toLowerCase() === 'wallpaper' || itemData.type?.toLowerCase() === 'wallpaper');
           if (isWallpaper && itemData.image) {
             const sd = itemData.spatialData;
-            const wallPlacement = sd?.wall_placement ?? { wallNormal: [0, 0, -1], wallPosition: 0 };
+            const interp = this.sceneManager.interpretSpatialDataForLoad(
+              sd as Record<string, unknown> | undefined,
+            );
+            const wallPlacement =
+              interp.wallPlacement ??
+              (sd?.wall_placement as { wallNormal: [number, number, number]; wallPosition: number }) ??
+              { wallNormal: [0, 0, -1] as [number, number, number], wallPosition: 0 };
             const wallWidth = sd?.wall_width ?? 4;
             const wallHeight = sd?.wall_height ?? 2.5;
-            const position = sd?.positions ?? [0, 1.25, 0];
             const wallpaper = new WallpaperItem(
               itemId,
               itemData.name,
@@ -646,9 +704,19 @@ class SceneContentLogic {
                 category: itemData.category,
                 type: itemData.type,
               },
-              { position, rotation: sd?.rotation ?? [0, 0, 0], scale: 1 }
+              {
+                position: interp.position,
+                rotation: interp.rotation,
+                scale: 1,
+              },
             );
             await this.sceneManager.addFurniture(wallpaper);
+            if (sd) {
+              this.sceneManager.registerDeployedSpatialSnapshot(
+                itemId,
+                sd as Record<string, unknown>,
+              );
+            }
             continue;
           }
 
@@ -663,6 +731,10 @@ class SceneContentLogic {
             wallMountable: itemData.wall_mountable || false,
           };
 
+          const sd = itemData.spatialData;
+          const interp = this.sceneManager.interpretSpatialDataForLoad(
+            sd as Record<string, unknown> | undefined,
+          );
           const furniture = new FurnitureItem(
             itemId,
             itemData.name,
@@ -670,18 +742,23 @@ class SceneContentLogic {
             modelPath,
             metadata,
             {
-              position: itemData.spatialData.positions,
-              rotation: itemData.spatialData.rotation,
-              scale: itemData.spatialData.scale[0],
+              position: interp.position,
+              rotation: interp.rotation,
+              scale: sd.scale[0],
             },
           );
 
-          const sd = itemData.spatialData;
-          if (sd?.placement_mode === 'wall' && sd?.wall_placement) {
-            furniture.setWallPlacement(sd.wall_placement);
+          if (sd?.placement_mode === "wall" && interp.wallPlacement) {
+            furniture.setWallPlacement(interp.wallPlacement);
           }
 
           await this.sceneManager.addFurniture(furniture);
+          if (sd) {
+            this.sceneManager.registerDeployedSpatialSnapshot(
+              itemId,
+              sd as Record<string, unknown>,
+            );
+          }
         }
 
         if (this.sceneManager) {
@@ -1258,6 +1335,9 @@ class SceneContentLogic {
           this.navigationController.setBoundingBox(boundingBox);
         }
 
+        modelGroup.updateMatrixWorld(true);
+        this.homeWorldMatrixBeforeAlignment = modelGroup.matrixWorld.clone();
+
         this.navigationController.setAlignmentCallbacks(
           (state, _data) => {
             this.updateState({ alignmentState: state });
@@ -1402,8 +1482,15 @@ class SceneContentLogic {
             }
           },
           (_transform) => {
-            this.sceneManager?.updateRoomBoundaryFromHomeModelWallpaper();
-            this.sceneManager?.repositionWallMountedItemsAfterAlignment();
+            homeModel.syncTransformFromGroup();
+            const g = homeModel.getGroup();
+            g.updateMatrixWorld(true);
+            const newM = g.matrixWorld.clone();
+            const oldM = this.homeWorldMatrixBeforeAlignment;
+            if (oldM && this.sceneManager) {
+              void this.sceneManager.onHomeAlignmentFinished(oldM, newM);
+            }
+            this.homeWorldMatrixBeforeAlignment = null;
           }
         );
         
@@ -1424,6 +1511,12 @@ class SceneContentLogic {
         
         this.navigationController.startAutomaticAlignment();
       } else {
+        const hm = this.sceneManager?.getHomeModel();
+        if (hm) {
+          const mg = hm.getGroup();
+          mg.updateMatrixWorld(true);
+          this.homeWorldMatrixBeforeAlignment = mg.matrixWorld.clone();
+        }
         this.updateState({
           alignmentMode: "world",
           alignmentStatus: "aligning",
@@ -1437,6 +1530,7 @@ class SceneContentLogic {
         });
       }
     } else {
+      this.homeWorldMatrixBeforeAlignment = null;
       if (this.state.homeTransparent) {
         this.sceneManager?.getHomeModel()?.setOpacity(0.0);
       }
@@ -1493,6 +1587,9 @@ class SceneContentLogic {
 
     const homeModel = this.sceneManager?.getHomeModel();
     if (homeModel) {
+      const g = homeModel.getGroup();
+      g.updateMatrixWorld(true);
+      this.homeWorldMatrixBeforeAlignment = g.matrixWorld.clone();
       homeModel.setOpacity(0.5);
     }
 
@@ -1511,11 +1608,22 @@ class SceneContentLogic {
   }
 
   handleLegacyAlignmentConfirm(): void {
+    const homeModel = this.sceneManager?.getHomeModel();
+    if (homeModel) {
+      homeModel.syncTransformFromGroup();
+      const g = homeModel.getGroup();
+      g.updateMatrixWorld(true);
+      const newM = g.matrixWorld.clone();
+      const oldM = this.homeWorldMatrixBeforeAlignment;
+      if (oldM && this.sceneManager) {
+        void this.sceneManager.onHomeAlignmentFinished(oldM, newM);
+      }
+      this.homeWorldMatrixBeforeAlignment = null;
+    }
     this.sceneManager?.updateRoomBoundaryFromHomeModel();
     const currentSession = this.xrStore?.getState()?.session;
     const isAR = currentSession && (currentSession as any).mode === 'immersive-ar';
 
-    const homeModel = this.sceneManager?.getHomeModel();
     if (homeModel) {
       homeModel.setOpacity(isAR ? 0.0 : 1.0);
       if (isAR) {
@@ -1538,6 +1646,7 @@ class SceneContentLogic {
   }
 
   handleAlignmentCancel(): void {
+    this.homeWorldMatrixBeforeAlignment = null;
     // Cleanup hit test source
     if (this.navigationController) {
       this.navigationController.resetAlignment();
@@ -1927,11 +2036,24 @@ class SceneContentLogic {
 
     this.updateState({ saving: true });
     try {
+      this.sceneManager.getHomeModel()?.syncTransformFromGroup();
       const sceneData = this.sceneManager.serializeScene();
 
       const formData = new FormData();
       formData.append("id", this.homeId);
       formData.append("deployedItems", JSON.stringify(sceneData.deployedItems));
+
+      const home = sceneData.home as Record<string, unknown> | null | undefined;
+      if (home) {
+        const pos = home.position as [number, number, number] | undefined;
+        const spatialPayload = {
+          positions: pos ? [pos[0], pos[1], pos[2]] : [0, 0, 0],
+          rotation: home.rotation,
+          scale: home.scale,
+          boundary: home.boundary,
+        };
+        formData.append("spatial_data", JSON.stringify(spatialPayload));
+      }
 
       const response = await makeAuthenticatedRequest(
         "/digitalhomes/update_home_design/",
@@ -2033,6 +2155,9 @@ class SceneContentLogic {
         }
       }
     }
+    if (result.success) {
+      this.sceneManager.refreshDeployedSpatialSnapshotFromLive(id);
+    }
   }
 
   private async handleWallFurnitureMove(
@@ -2068,6 +2193,9 @@ class SceneContentLogic {
     } else if (result.success && !result.needsPreciseCheck) {
       this.currentAABBPosition = null;
     }
+    if (result.success) {
+      this.sceneManager.refreshDeployedSpatialSnapshotFromLive(id);
+    }
   }
 
   private handleFurnitureRotate(id: string, deltaY: number): void {
@@ -2084,6 +2212,7 @@ class SceneContentLogic {
     ];
 
     this.sceneManager.rotateFurniture(id, newRot);
+    this.sceneManager.refreshDeployedSpatialSnapshotFromLive(id);
 
     const twoPi = Math.PI * 2;
     let normalizedRotation = newRot[1] % twoPi;
@@ -2131,6 +2260,11 @@ class SceneContentLogic {
       this.pendingMove = null;
       this.updateState({ showPreciseCheckPanel: true });
     }
+    if (result.success) {
+      this.sceneManager.refreshDeployedSpatialSnapshotFromLive(
+        this.state.selectedItemId,
+      );
+    }
   }
 
   handleCancelMoveCloser(): void {
@@ -2167,6 +2301,9 @@ class SceneContentLogic {
         );
         this.currentAABBPosition = null;
       } else {
+        this.sceneManager.refreshDeployedSpatialSnapshotFromLive(
+          this.state.selectedItemId,
+        );
         this.showNotificationMessage(
           "✅ Position validated! Furniture can stay here.",
           "success",
@@ -2203,6 +2340,9 @@ class SceneContentLogic {
         );
         furniture.setCollision(false);
       }
+      this.sceneManager.refreshDeployedSpatialSnapshotFromLive(
+        this.state.selectedItemId,
+      );
     }
 
     this.updateState({ showPreciseCheckPanel: false });
@@ -2767,6 +2907,9 @@ class SceneContentLogic {
         this.updateState({ showUnmountPanel: true });
       }
     } else if (result.success) {
+      this.sceneManager.refreshDeployedSpatialSnapshotFromLive(
+        this.state.selectedItemId,
+      );
       const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
       if (furniture) {
         this.updateState({ gizmoPosition: furniture.getPosition() });
@@ -2811,7 +2954,9 @@ class SceneContentLogic {
 
 
   this.sceneManager.rotateFurniture(this.state.selectedItemId, newRot);
-
+  this.sceneManager.refreshDeployedSpatialSnapshotFromLive(
+    this.state.selectedItemId,
+  );
 
   const twoPi = Math.PI * 2;
   let normalizedRotation = newRot[1] % twoPi;
@@ -2826,6 +2971,9 @@ class SceneContentLogic {
 
   if (this.state.selectedItemId && this.sceneManager) {
     this.sceneManager.scaleFurniture(this.state.selectedItemId, clampedScale);
+    this.sceneManager.refreshDeployedSpatialSnapshotFromLive(
+      this.state.selectedItemId,
+    );
   }
 }
 
@@ -2843,6 +2991,9 @@ class SceneContentLogic {
           newRotation,
           currentRot[2],
         ]);
+        this.sceneManager.refreshDeployedSpatialSnapshotFromLive(
+          this.state.selectedItemId,
+        );
       }
     }
   }
@@ -3198,18 +3349,17 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
  
   useEffect(() => {
     if (!logicRef.current) return;
-    logicRef.current.loadHome(digitalHome);
+    const logic = logicRef.current;
+    let cancelled = false;
+    void (async () => {
+      await Promise.all([logic.loadHome(digitalHome), logic.loadFurnitureCatalog()]);
+      if (cancelled) return;
+      await logic.loadDeployedItems();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [homeId, digitalHome]);
-
-  useEffect(() => {
-    if (!logicRef.current) return;
-    logicRef.current.loadFurnitureCatalog();
-  }, []);
-
-  useEffect(() => {
-    if (!logicRef.current || logicRef.current.modelUrlCache.size === 0) return;
-    logicRef.current.loadDeployedItems();
-  }, [logicRef.current?.modelUrlCache.size]);
 
   useFrame((state, delta, xrFrame) => {
     if (!logicRef.current) return;

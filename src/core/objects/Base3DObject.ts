@@ -97,6 +97,17 @@ export abstract class Base3DObject {
     this.group.updateMatrix();
     this.group.updateMatrixWorld(true);
   }
+  
+  syncTransformFromGroup(): void {
+    const g = this.group;
+    this.transform.position = [g.position.x, g.position.y, g.position.z];
+    this.transform.rotation = [g.rotation.x, g.rotation.y, g.rotation.z];
+    if (Math.abs(g.scale.x - g.scale.y) < 1e-6 && Math.abs(g.scale.y - g.scale.z) < 1e-6) {
+      this.transform.scale = g.scale.x;
+    } else {
+      this.transform.scale = [g.scale.x, g.scale.y, g.scale.z];
+    }
+  }
 
   async loadModel(_scene: THREE.Scene): Promise<void> {
     if (!this.modelPath) {
