@@ -10,7 +10,7 @@ export interface LassoRect {
 }
 
 interface WallpaperLassoOverlayProps {
-  getPlaneMesh: () => THREE.Mesh<THREE.PlaneGeometry> | null;
+  getPlaneMesh: () => THREE.Mesh | null;
   lassoRegions: LassoRect[];
   previewRect: { x: number; y: number; width: number; height: number } | null;
   visible: boolean;

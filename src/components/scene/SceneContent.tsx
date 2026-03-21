@@ -35,6 +35,7 @@ import {
   FurnitureEditController,
 } from "../../core/controllers/XRControllerBase";
 import { makeAuthenticatedRequest, logout } from "../../utils/Auth";
+import { compressWallpaperEntriesInDeployedItems } from "../../utils/compressImageForStorage";
 import { VRSidebar } from "../panel/VRSidebar";
 // import { VRAlignmentPanel, VRAlignmentConfirmPanel } from "../panel/VRAlignmentPanel";
 import { VRAlignmentPanel } from "../panel/VRAlignmentPanel";
@@ -681,16 +682,14 @@ class SceneContentLogic {
           // Plane for wallpaper creation
           const isWallpaper = (itemData.category?.toLowerCase() === 'wallpaper' || itemData.type?.toLowerCase() === 'wallpaper');
           if (isWallpaper && itemData.image) {
-            const sd = itemData.spatialData;
-            const interp = this.sceneManager.interpretSpatialDataForLoad(
-              sd as Record<string, unknown> | undefined,
-            );
+            const sd = itemData.spatialData as Record<string, unknown> | undefined;
+            const interp = this.sceneManager.interpretSpatialDataForLoad(sd);
             const wallPlacement =
               interp.wallPlacement ??
               (sd?.wall_placement as { wallNormal: [number, number, number]; wallPosition: number }) ??
               { wallNormal: [0, 0, -1] as [number, number, number], wallPosition: 0 };
-            const wallWidth = sd?.wall_width ?? 4;
-            const wallHeight = sd?.wall_height ?? 2.5;
+            const wallWidth = Number(itemData.wall_width ?? sd?.wall_width ?? 4);
+            const wallHeight = Number(itemData.wall_height ?? sd?.wall_height ?? 2.5);
             const wallpaper = new WallpaperItem(
               itemId,
               itemData.name,
@@ -698,7 +697,7 @@ class SceneContentLogic {
               wallWidth,
               wallHeight,
               wallPlacement,
-              itemData.image,
+              itemData.image as string,
               {
                 description: itemData.description,
                 category: itemData.category,
@@ -711,11 +710,20 @@ class SceneContentLogic {
               },
             );
             await this.sceneManager.addFurniture(wallpaper);
+            const cutouts = itemData.wallpaper_cutouts as
+              | { x: number; y: number; width: number; height: number }[]
+              | undefined;
+            if (Array.isArray(cutouts) && cutouts.length > 0) {
+              wallpaper.applyCutouts(cutouts);
+            }
             if (sd) {
-              this.sceneManager.registerDeployedSpatialSnapshot(
-                itemId,
-                sd as Record<string, unknown>,
-              );
+              const snapshot: Record<string, unknown> = {
+                ...sd,
+                wall_width: wallWidth,
+                wall_height: wallHeight,
+              };
+              if (cutouts?.length) snapshot.wallpaper_cutouts = cutouts;
+              this.sceneManager.registerDeployedSpatialSnapshot(itemId, snapshot);
             }
             continue;
           }
@@ -2038,10 +2046,13 @@ class SceneContentLogic {
     try {
       this.sceneManager.getHomeModel()?.syncTransformFromGroup();
       const sceneData = this.sceneManager.serializeScene();
+      const deployedForSave = await compressWallpaperEntriesInDeployedItems(
+        sceneData.deployedItems as Record<string, unknown>,
+      );
 
       const formData = new FormData();
       formData.append("id", this.homeId);
-      formData.append("deployedItems", JSON.stringify(sceneData.deployedItems));
+      formData.append("deployedItems", JSON.stringify(deployedForSave));
 
       const home = sceneData.home as Record<string, unknown> | null | undefined;
       if (home) {

@@ -2,10 +2,18 @@ import * as THREE from 'three';
 import { FurnitureItem, FurnitureMetadata, WallPlacementInfo } from './FurnitureItem';
 import { Transform } from './Base3DObject';
 
+export type WallpaperCutoutRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export class WallpaperItem extends FurnitureItem {
   protected wallWidth: number;
   protected wallHeight: number;
   protected base64Image: string;
+  protected cutoutRegions: WallpaperCutoutRect[] = [];
 
   constructor(
     id: string,
@@ -37,13 +45,12 @@ export class WallpaperItem extends FurnitureItem {
   reorientPlaneToWall(): void {
     const wallPlacement = this.getWallPlacement();
     if (!wallPlacement) return;
-    this.applyWallOrientationToPlane((plane) =>
-      this.orientPlaneToNormal(plane, wallPlacement.wallNormal)
-    );
+    const plane = this.getWallpaperSurfaceMesh();
+    if (plane) this.orientPlaneToNormal(plane, wallPlacement.wallNormal);
   }
 
   private orientPlaneToNormal(
-    plane: THREE.Mesh<THREE.PlaneGeometry>,
+    plane: THREE.Mesh,
     wallNormal: [number, number, number]
   ): void {
     const targetNormal = new THREE.Vector3(
@@ -57,16 +64,6 @@ export class WallpaperItem extends FurnitureItem {
     } else {
       plane.quaternion.setFromUnitVectors(defaultNormal, targetNormal);
     }
-  }
-
-  private applyWallOrientationToPlane(
-    fn: (plane: THREE.Mesh<THREE.PlaneGeometry>) => void
-  ): void {
-    this.modelGroup.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.geometry?.type === 'PlaneGeometry') {
-        fn(child as THREE.Mesh<THREE.PlaneGeometry>);
-      }
-    });
   }
 
   override moveAlongWall(_deltaVertical: number, deltaHorizontal: number): [number, number, number] {
@@ -128,6 +125,9 @@ export class WallpaperItem extends FurnitureItem {
       wall_width: this.wallWidth,
       wall_height: this.wallHeight,
       image: this.base64Image,
+      ...(this.cutoutRegions.length > 0
+        ? { wallpaper_cutouts: this.cutoutRegions }
+        : {}),
     };
   }
 
@@ -142,14 +142,19 @@ export class WallpaperItem extends FurnitureItem {
     super.dispose();
   }
 
-  getPlaneMesh(): THREE.Mesh<THREE.PlaneGeometry> | null {
-    let found: THREE.Mesh<THREE.PlaneGeometry> | null = null;
+  getWallpaperSurfaceMesh(): THREE.Mesh | null {
+    let found: THREE.Mesh | null = null;
     this.modelGroup.traverse((child) => {
-      if (!found && child instanceof THREE.Mesh && child.geometry?.type === 'PlaneGeometry') {
-        found = child as THREE.Mesh<THREE.PlaneGeometry>;
-      }
+      if (found) return;
+      if (!(child instanceof THREE.Mesh) || !child.material) return;
+      const mat = child.material as THREE.MeshBasicMaterial;
+      if (mat.map) found = child;
     });
     return found;
+  }
+
+  getPlaneMesh(): THREE.Mesh | null {
+    return this.getWallpaperSurfaceMesh();
   }
 
   //Set plane material opacity
@@ -164,7 +169,9 @@ export class WallpaperItem extends FurnitureItem {
   }
 
   // Cutout implementation
-  applyCutouts(holes: { x: number; y: number; width: number; height: number }[]): void {
+  applyCutouts(holes: WallpaperCutoutRect[]): void {
+    this.cutoutRegions = holes.map((h) => ({ ...h }));
+
     const w = this.wallWidth;
     const h = this.wallHeight;
     const hw = w / 2;
@@ -192,15 +199,12 @@ export class WallpaperItem extends FurnitureItem {
     }
 
     const geom = new THREE.ShapeGeometry(shape);
-
-    this.modelGroup.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.geometry?.type === 'PlaneGeometry') {
-        const mesh = child as THREE.Mesh<THREE.BufferGeometry>;
-        mesh.geometry.dispose();
-        mesh.geometry = geom;
-        this.applyPlaneUVsToGeometry(geom, w, h);
-      }
-    });
+    const mesh = this.getWallpaperSurfaceMesh();
+    if (mesh) {
+      mesh.geometry.dispose();
+      mesh.geometry = geom;
+      this.applyPlaneUVsToGeometry(geom, w, h);
+    }
   }
 
   private applyPlaneUVsToGeometry(geometry: THREE.BufferGeometry, w: number, h: number): void {
