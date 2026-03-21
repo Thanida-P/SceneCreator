@@ -6,6 +6,7 @@ import { SceneCreator } from './pages/SceneCreator';
 import { ProtectedRoute } from './pages/auth/ProtectedRoute';
 import { AddModel } from './pages/AddModel';
 import { ProductLibrary } from './pages/ProductLibrary';
+import { AvatarSelection } from './pages/AvatarSelection';
 
 function App() {
   return (
@@ -42,6 +43,14 @@ function App() {
           element={
             <ProtectedRoute>
               <ProductLibrary />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/avatar-selection"
+          element={
+            <ProtectedRoute>
+              <AvatarSelection />
             </ProtectedRoute>
           }
         />

@@ -28,7 +28,7 @@ const BACKEND_CATEGORY_MAP: Record<string, Category> = {
 };
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  complete:            { bg: 'rgba(34,197,94,0.12)',  color: '#16a34a', label: 'Completed' },
+  complete:            { bg: 'rgba(34,197,94,0.12)',  color: '#16a34a', label: 'Purchased' },
   'payment completed': { bg: 'rgba(59,130,246,0.12)', color: '#2563eb', label: 'Paid' },
   pending:             { bg: 'rgba(234,179,8,0.12)',  color: '#ca8a04', label: 'Pending' },
   cancelled:           { bg: 'rgba(239,68,68,0.12)',  color: '#dc2626', label: 'Cancelled' },
@@ -61,11 +61,14 @@ interface LibraryItem {
   orderInfo: OrderInfo | null; // null = custom-imported item
 }
 
+type ItemSource = 'all' | 'purchased' | 'custom';
+
 interface LibraryState {
   items: LibraryItem[];
   loading: boolean;
   error: string | null;
   selectedCategory: Category;
+  selectedSource: ItemSource;
   selectedItem: LibraryItem | null;
   searchQuery: string;
 }
@@ -113,6 +116,7 @@ class ProductLibraryLogic {
       loading: true,
       error: null,
       selectedCategory: 'all',
+      selectedSource: 'all',
       selectedItem: null,
       searchQuery: '',
     };
@@ -191,10 +195,15 @@ class ProductLibraryLogic {
   }
 
   getFilteredItems(): LibraryItem[] {
-    const { items, selectedCategory, searchQuery } = this.state;
+    const { items, selectedCategory, selectedSource, searchQuery } = this.state;
     return items.filter((item) => {
       const matchCategory =
         selectedCategory === 'all' || getCategoryKey(item.category) === selectedCategory;
+      const isCustom = item.orderInfo === null;
+      const matchSource =
+        selectedSource === 'all' ||
+        (selectedSource === 'custom' && isCustom) ||
+        (selectedSource === 'purchased' && !isCustom);
       const q = searchQuery.toLowerCase().trim();
       const matchSearch =
         q === '' ||
@@ -202,8 +211,16 @@ class ProductLibraryLogic {
         item.description.toLowerCase().includes(q) ||
         item.itemType.toLowerCase().includes(q) ||
         item.category.toLowerCase().includes(q);
-      return matchCategory && matchSearch;
+      return matchCategory && matchSource && matchSearch;
     });
+  }
+
+  getPurchasedCount(): number {
+    return this.state.items.filter((i) => i.orderInfo !== null).length;
+  }
+
+  getCustomCount(): number {
+    return this.state.items.filter((i) => i.orderInfo === null).length;
   }
 
   getTotalCount(): number {
@@ -229,6 +246,7 @@ class ProductLibraryClass extends Component<LibraryClassProps, LibraryState> {
       loading: true,
       error: null,
       selectedCategory: 'all',
+      selectedSource: 'all',
       selectedItem: null,
       searchQuery: '',
     };
@@ -243,9 +261,14 @@ class ProductLibraryClass extends Component<LibraryClassProps, LibraryState> {
   }
 
   render() {
-    const { loading, error, selectedCategory, selectedItem, searchQuery } = this.state;
+    const { loading, error, selectedCategory, selectedSource, selectedItem, searchQuery } = this.state;
     const filtered = this.logic.getFilteredItems();
     const categories: Category[] = ['all', 'living-room', 'bedroom', 'office-room', 'kitchen', 'widgets'];
+    const sources: { key: ItemSource; label: string; count: number }[] = [
+      { key: 'all', label: 'All', count: this.logic.getTotalCount() },
+      { key: 'purchased', label: 'Purchased item', count: this.logic.getPurchasedCount() },
+      { key: 'custom', label: 'Custom imported item', count: this.logic.getCustomCount() },
+    ];
 
     return (
       <div style={styles.page}>
@@ -290,6 +313,18 @@ class ProductLibraryClass extends Component<LibraryClassProps, LibraryState> {
             onChange={(e) => this.logic.updateState({ searchQuery: e.target.value })}
             style={styles.searchInput}
           />
+          <div style={styles.categoryRow}>
+            {sources.map((src) => (
+              <button
+                key={src.key}
+                onClick={() => this.logic.updateState({ selectedSource: src.key })}
+                style={{ ...styles.catBtn, ...(selectedSource === src.key ? srcBtnActive(src.key) : {}) }}
+              >
+                {src.label}
+                <span style={{ marginLeft: '0.35rem', opacity: 0.7, fontSize: '0.7rem' }}>({src.count})</span>
+              </button>
+            ))}
+          </div>
           <div style={styles.categoryRow}>
             {categories.map((cat) => (
               <button
@@ -390,10 +425,13 @@ class ProductLibraryClass extends Component<LibraryClassProps, LibraryState> {
                       {isCustom ? (
                         <p style={styles.customLabel}>Custom imported item</p>
                       ) : (
-                        <div style={styles.metaRow}>
-                          <span style={styles.price}>{formatPrice(item.orderInfo!.orderTotal)}</span>
-                          <span style={styles.date}>{formatDate(item.orderInfo!.purchasedAt)}</span>
-                        </div>
+                        <>
+                          <p style={styles.purchasedLabel}>Purchased item</p>
+                          <div style={styles.metaRow}>
+                            <span style={styles.price}>{formatPrice(item.orderInfo!.orderTotal)}</span>
+                            <span style={styles.date}>{formatDate(item.orderInfo!.purchasedAt)}</span>
+                          </div>
+                        </>
                       )}
 
                       <div style={styles.tagRow}>
@@ -519,6 +557,12 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+const srcBtnActive = (key: ItemSource): React.CSSProperties => {
+  if (key === 'purchased') return { background: '#3b82f6', borderColor: '#3b82f6', color: '#fff' };
+  if (key === 'custom') return { background: '#7c3aed', borderColor: '#7c3aed', color: '#fff' };
+  return { background: '#475569', borderColor: '#475569', color: '#fff' };
+};
+
 const styles: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', backgroundColor: '#e7e9eb', color: '#1e293b', fontFamily: 'system-ui, -apple-system, sans-serif' },
   header: { padding: '1.25rem 2rem', background: 'white', borderBottom: '1px solid rgba(0,0,0,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
@@ -550,6 +594,7 @@ const styles: Record<string, React.CSSProperties> = {
   price: { fontSize: '1rem', fontWeight: 700, color: '#1e293b' },
   date: { fontSize: '0.72rem', color: '#94a3b8', textAlign: 'right' as const },
   customLabel: { fontSize: '0.75rem', color: '#7c3aed', margin: '0 0 0.6rem 0', fontStyle: 'italic' },
+  purchasedLabel: { fontSize: '0.75rem', color: '#2563eb', margin: '0 0 0.35rem 0', fontStyle: 'italic' },
   tagRow: { display: 'flex', flexWrap: 'wrap', gap: '0.35rem' },
   tag: { padding: '0.18rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 500 },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' },

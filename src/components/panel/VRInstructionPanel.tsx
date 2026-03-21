@@ -31,6 +31,17 @@ const sections = [
       "Use sliders to adjust scale & rotation",
     ],
   },
+  {
+    title: "Avatar Mode",
+    color: "#6366F1",
+    content: [
+      "Press Avatar in sidebar to toggle on/off",
+      "I / K: Walk forward / backward",
+      "J / L: Strafe left / right",
+      "Space: Jump",
+      "U / M / N: Wave / Sit / Sleep",
+    ],
+  },
 ];
 
 export function VRInstructionPanel({ show, onClose }: { show: boolean; onClose: () => void }) {

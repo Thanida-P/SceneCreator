@@ -46,6 +46,7 @@ import { ARSessionHandler } from "./ARSessionHandler";
 import { WeatherWidget } from "../../core/objects/WeatherWidget";
 import { TextureSelectorPanel, TextureOption } from "../panel/texture/TextureSelectorPanel";
 import { EnvironmentSelectorPanel, EnvironmentOption } from "../panel/texture/EnvironmentSelectorPanel";
+import { AvatarController, AVATAR_URL_MAP } from "./AvatarController";
 
 const DIGITAL_HOME_PLATFORM_BASE_URL = import.meta.env
   .VITE_DIGITAL_HOME_PLATFORM_URL;
@@ -173,6 +174,9 @@ interface SceneState {
   loadingEnvironment: boolean;
   experienceMode: boolean;
   experienceWhiteboardId: string | null;
+  showAvatarMode: boolean;
+  avatarLoadError: boolean;
+  selectedAvatarIndex: number;
   whiteboardTool: WhiteboardTool;
   showCornerSelection: boolean;
   showHeadTrackingAlignment: boolean;
@@ -303,6 +307,9 @@ class SceneContentLogic {
       experienceMode: false,
       experienceWhiteboardId: null,
       whiteboardTool: "pen",
+      showAvatarMode: false,
+      avatarLoadError: false,
+      selectedAvatarIndex: parseInt(localStorage.getItem("selectedAvatarIndex") ?? "4", 10),
     };
   }
 
@@ -1872,7 +1879,7 @@ class SceneContentLogic {
         break;
 
     case "customize":
-      this.updateState({ 
+      this.updateState({
         showFurniture: true,
         showControlPanel: false,
         showSlider: false,
@@ -1883,6 +1890,35 @@ class SceneContentLogic {
         showTexturePanel: false,
         showEnvironmentPanel: false,
       });
+      break;
+
+    case "avatar":
+      if (this.state.showAvatarMode) {
+        // Deactivate avatar mode
+        this.navigationController?.setEnabled(true);
+        this.updateState({
+          showAvatarMode: false,
+          sidebarActiveItem: null,
+        });
+      } else {
+        // Activate avatar mode – close all other panels first
+        this.navigationController?.setEnabled(false);
+        const savedAvatarIdx = parseInt(localStorage.getItem("selectedAvatarIndex") ?? "4", 10);
+        this.updateState({
+          showAvatarMode: true,
+          selectedAvatarIndex: savedAvatarIdx,
+          showFurniture: false,
+          showControlPanel: false,
+          showSlider: false,
+          showInstructions: false,
+          showTransformGizmo: false,
+          showRotationGizmo: false,
+          showScalePanel: false,
+          showTexturePanel: false,
+          showEnvironmentPanel: false,
+          showWallPanel: false,
+        });
+      }
       break;
   }
 }
@@ -3103,6 +3139,9 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     experienceMode: false,
     experienceWhiteboardId: null,
     whiteboardTool: "pen",
+    showAvatarMode: false,
+    avatarLoadError: false,
+    selectedAvatarIndex: 4,
   });
 
   const logicRef = useRef<SceneContentLogic | null>(null);
@@ -3685,6 +3724,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           <VRSidebar
             show={state.showSidebar && !state.experienceMode}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
+            activeItemId={state.sidebarActiveItem}
             extraItems={
               state.selectedItemId &&
               logic.sceneManager?.isWallMounted(state.selectedItemId)
@@ -3724,6 +3764,16 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           />
         </group>
       </HeadLockedUI>
+      {/* ── Avatar 3rd-person mode ── */}
+      {state.showAvatarMode && AVATAR_URL_MAP[state.selectedAvatarIndex] && (
+        <AvatarController
+          key={`avatar-${state.selectedAvatarIndex}`}
+          avatarUrl={AVATAR_URL_MAP[state.selectedAvatarIndex]!}
+          initialPosition={[0, 0, 0]}
+          onLoadError={() => logic.updateState({ avatarLoadError: true })}
+        />
+      )}
+
       <HeadLockedUI
         distance={1.3}
         verticalOffset={0}
