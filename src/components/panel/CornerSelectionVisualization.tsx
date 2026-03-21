@@ -54,17 +54,17 @@ export function CornerSelectionVisualization({
 
   return (
     <group>
-      {corners.map((corner, index) => {
-        const isSelected = selectedCornerIndex === index;
+      {corners.map((corner, arrayIndex) => {
+        const isSelected = selectedCornerIndex === corner.index;
         const scale = isSelected ? 1.5 : 1.0;
         const color = isSelected ? "#4CAF50" : "#3FA4CE";
 
         return (
-          <group key={index}>
+          <group key={corner.index}>
             {/* Corner marker sphere */}
             <mesh
               ref={(el) => {
-                cornerRefs.current[index] = el;
+                cornerRefs.current[arrayIndex] = el;
               }}
               position={corner.position}
               scale={scale}
@@ -73,7 +73,7 @@ export function CornerSelectionVisualization({
               }}
               onPointerDown={(e) => {
                 e.stopPropagation();
-                onCornerSelect(index);
+                onCornerSelect(corner.index);
               }}
             >
               <sphereGeometry args={[0.1, 16, 16]} />

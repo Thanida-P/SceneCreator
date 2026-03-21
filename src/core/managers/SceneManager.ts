@@ -1213,6 +1213,79 @@ export class SceneManager {
     await this.updateAllCollisions();
   }
 
+  // restore home to base case before realignment
+  restorePreAlignmentBaseline(
+    homeLocalSnapshot: {
+      position: THREE.Vector3;
+      quaternion: THREE.Quaternion;
+      scale: THREE.Vector3;
+    },
+    lastCompletedAlignmentDelta: THREE.Matrix4 | null,
+  ): void {
+    if (!this.homeModel) return;
+
+    const inv = lastCompletedAlignmentDelta
+      ? new THREE.Matrix4().copy(lastCompletedAlignmentDelta).invert()
+      : null;
+
+    if (inv) {
+      for (const furniture of this.furnitureItems.values()) {
+        const id = furniture.getId();
+        const snap = this.deployedSpatialSnapshots.get(id);
+        if (snap && snap.coordinate_frame === 'home_local') {
+          continue;
+        }
+
+        const mF = furniture.getGroup().matrixWorld.clone();
+        const mNext = new THREE.Matrix4().multiplyMatrices(inv, mF);
+        const pos = new THREE.Vector3();
+        const quat = new THREE.Quaternion();
+        const sc = new THREE.Vector3();
+        mNext.decompose(pos, quat, sc);
+        const euler = new THREE.Euler().setFromQuaternion(quat, 'XYZ');
+        furniture.setPosition([pos.x, pos.y, pos.z]);
+        furniture.setRotation([euler.x, euler.y, euler.z]);
+        if (furniture.isWallpaper?.()) {
+          (furniture as WallpaperItem).reorientPlaneToWall();
+        }
+        furniture.syncTransformFromGroup();
+        this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+      }
+    }
+
+    const g = this.homeModel.getGroup();
+    g.position.copy(homeLocalSnapshot.position);
+    g.quaternion.copy(homeLocalSnapshot.quaternion);
+    g.scale.copy(homeLocalSnapshot.scale);
+    g.updateMatrix();
+    g.updateMatrixWorld(true);
+    this.homeModel.syncTransformFromGroup();
+
+    for (const furniture of this.furnitureItems.values()) {
+      const id = furniture.getId();
+      const snap = this.deployedSpatialSnapshots.get(id);
+      if (!snap || snap.coordinate_frame !== 'home_local') {
+        continue;
+      }
+
+      const interp = this.interpretSpatialDataForLoad(snap);
+      furniture.setPosition(interp.position);
+      furniture.setRotation(interp.rotation);
+      if (interp.wallPlacement) {
+        furniture.setWallPlacement(interp.wallPlacement);
+      }
+      if (furniture.isWallpaper?.()) {
+        (furniture as WallpaperItem).reorientPlaneToWall();
+      }
+      furniture.syncTransformFromGroup();
+      this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+    }
+
+    this.updateRoomBoundaryFromHomeModel();
+    this.updateRoomBoundaryFromHomeModelWallpaper();
+    void this.updateAllCollisions();
+  }
+
   refreshDeployedSpatialSnapshotFromLive(itemId: string): void {
     const f = this.furnitureItems.get(itemId);
     if (!f || !this.homeModel) return;
