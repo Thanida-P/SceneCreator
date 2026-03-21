@@ -39,6 +39,7 @@ export class SceneManager {
   protected config: Required<SceneConfig>;
   protected selectedItemId: string | null = null;
   protected lastValidPositions: Map<string, [number, number, number]> = new Map();
+  protected deployedSpatialSnapshots: Map<string, Record<string, unknown>> = new Map();
 
   constructor(scene: THREE.Scene, config: SceneConfig = {}) {
     this.scene = scene;
@@ -289,6 +290,13 @@ export class SceneManager {
     this.scene.add(furniture.getGroup());
     
     await furniture.loadModel(this.scene);
+
+    if (this.homeModel && !this.deployedSpatialSnapshots.has(furniture.getId())) {
+      this.deployedSpatialSnapshots.set(
+        furniture.getId(),
+        this.serializeFurnitureForStorage(furniture) as Record<string, unknown>,
+      );
+    }
     
     if (this.config.enableCollisionDetection) {
       setTimeout(async () => {
@@ -312,6 +320,7 @@ export class SceneManager {
     this.scene.remove(furniture.getGroup());
     furniture.dispose();
     this.furnitureItems.delete(id);
+    this.deployedSpatialSnapshots.delete(id);
     
     this.collisionDetector.removeFurniture(id);
     this.lastValidPositions.delete(id); // Clear last valid position
@@ -332,6 +341,7 @@ export class SceneManager {
   }
 
   clearAllFurniture(): void {
+    this.deployedSpatialSnapshots.clear();
     this.furnitureItems.forEach((furniture) => {
       this.scene.remove(furniture.getGroup());
       furniture.dispose();
@@ -1088,6 +1098,183 @@ export class SceneManager {
     return adjusted;
   }
 
+  interpretSpatialDataForLoad(sd: Record<string, unknown> | undefined | null): {
+    position: [number, number, number];
+    rotation: [number, number, number];
+    wallPlacement: WallPlacementInfo | null;
+  } {
+    const z: [number, number, number] = [0, 0, 0];
+    if (!sd) {
+      return { position: z, rotation: z, wallPlacement: null };
+    }
+
+    const pRaw = (sd.positions as number[] | undefined) ?? (sd.position as number[] | undefined) ?? [0, 0, 0];
+    const px = Number(pRaw[0] ?? 0);
+    const py = Number(pRaw[1] ?? 0);
+    const pz = Number(pRaw[2] ?? 0);
+
+    const rRaw = (sd.rotation as number[] | undefined) ?? [0, 0, 0];
+    const rx = Number(rRaw[0] ?? 0);
+    const ry = Number(rRaw[1] ?? 0);
+    const rz = Number(rRaw[2] ?? 0);
+
+    const frame = sd.coordinate_frame as string | undefined;
+    let position: [number, number, number];
+    let rotation: [number, number, number];
+
+    if (frame === 'home_local' && this.homeModel) {
+      this.homeModel.getGroup().updateMatrixWorld(true);
+      const homeM = this.homeModel.getGroup().matrixWorld;
+
+      const worldPos = new THREE.Vector3(px, py, pz).applyMatrix4(homeM);
+      position = [worldPos.x, worldPos.y, worldPos.z];
+
+      const qLocal = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz, 'XYZ'));
+      const qH = new THREE.Quaternion();
+      this.homeModel.getGroup().getWorldQuaternion(qH);
+      const qW = qH.clone().multiply(qLocal);
+      const eW = new THREE.Euler().setFromQuaternion(qW, 'XYZ');
+      rotation = [eW.x, eW.y, eW.z];
+    } else {
+      position = [px, py, pz];
+      rotation = [rx, ry, rz];
+    }
+
+    let wallPlacement: WallPlacementInfo | null = null;
+    const wallSideId = sd.wall_side_id as string | undefined;
+    if (wallSideId) {
+      const w = this.getAvailableWalls().find((x) => x.id === wallSideId);
+      if (w) {
+        wallPlacement = { wallNormal: w.wallNormal, wallPosition: w.wallPosition };
+      }
+    }
+    if (!wallPlacement && sd.placement_mode === 'wall' && sd.wall_placement) {
+      wallPlacement = sd.wall_placement as WallPlacementInfo;
+    }
+
+    return { position, rotation, wallPlacement };
+  }
+
+  registerDeployedSpatialSnapshot(itemId: string, spatialData: Record<string, unknown>): void {
+    this.deployedSpatialSnapshots.set(itemId, { ...spatialData });
+  }
+
+  async onHomeAlignmentFinished(
+    oldHomeWorld: THREE.Matrix4,
+    newHomeWorld: THREE.Matrix4
+  ): Promise<void> {
+    const delta = new THREE.Matrix4().multiplyMatrices(
+      newHomeWorld,
+      new THREE.Matrix4().copy(oldHomeWorld).invert()
+    );
+
+    this.updateRoomBoundaryFromHomeModel();
+
+    for (const furniture of this.furnitureItems.values()) {
+      const id = furniture.getId();
+      const snap = this.deployedSpatialSnapshots.get(id);
+      if (snap && snap.coordinate_frame === 'home_local') {
+        const interp = this.interpretSpatialDataForLoad(snap);
+        furniture.setPosition(interp.position);
+        furniture.setRotation(interp.rotation);
+        if (interp.wallPlacement) {
+          furniture.setWallPlacement(interp.wallPlacement);
+        }
+        if (furniture.isWallpaper?.()) {
+          (furniture as WallpaperItem).reorientPlaneToWall();
+        }
+        furniture.syncTransformFromGroup();
+        this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+        continue;
+      }
+
+      const mF = furniture.getGroup().matrixWorld.clone();
+      const mNext = new THREE.Matrix4().multiplyMatrices(delta, mF);
+      const pos = new THREE.Vector3();
+      const quat = new THREE.Quaternion();
+      const sc = new THREE.Vector3();
+      mNext.decompose(pos, quat, sc);
+      const euler = new THREE.Euler().setFromQuaternion(quat, 'XYZ');
+      furniture.setPosition([pos.x, pos.y, pos.z]);
+      furniture.setRotation([euler.x, euler.y, euler.z]);
+      if (furniture.isWallpaper?.()) {
+        (furniture as WallpaperItem).reorientPlaneToWall();
+      }
+      furniture.syncTransformFromGroup();
+      this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+    }
+
+    this.updateRoomBoundaryFromHomeModelWallpaper();
+    await this.updateAllCollisions();
+  }
+
+  refreshDeployedSpatialSnapshotFromLive(itemId: string): void {
+    const f = this.furnitureItems.get(itemId);
+    if (!f || !this.homeModel) return;
+    this.deployedSpatialSnapshots.set(itemId, this.serializeFurnitureForStorage(f) as Record<string, unknown>);
+  }
+
+  private findWallIdForWorldPlacement(wp: WallPlacementInfo): string | null {
+    const walls = this.getAvailableWalls();
+    let best: { id: string; dot: number } | null = null;
+    for (const w of walls) {
+      const dot =
+        wp.wallNormal[0] * w.wallNormal[0] +
+        wp.wallNormal[1] * w.wallNormal[1] +
+        wp.wallNormal[2] * w.wallNormal[2];
+      const ad = Math.abs(dot);
+      if (ad > 0.95 && (!best || ad > best.dot)) {
+        best = { id: w.id, dot: ad };
+      }
+    }
+    return best?.id ?? null;
+  }
+
+  serializeFurnitureForStorage(furniture: FurnitureItem): Record<string, unknown> {
+    furniture.syncTransformFromGroup();
+    const base = furniture.serialize();
+
+    if (!this.homeModel) {
+      return { ...base, coordinate_frame: 'world' };
+    }
+
+    this.homeModel.getGroup().updateMatrixWorld(true);
+    const invHome = new THREE.Matrix4().copy(this.homeModel.getGroup().matrixWorld).invert();
+
+    const posW = new THREE.Vector3();
+    furniture.getGroup().getWorldPosition(posW);
+    const posL = posW.clone().applyMatrix4(invHome);
+
+    const qW = new THREE.Quaternion();
+    furniture.getGroup().getWorldQuaternion(qW);
+    const qH = new THREE.Quaternion();
+    this.homeModel.getGroup().getWorldQuaternion(qH);
+    const qL = qH.clone().invert().multiply(qW);
+    const eL = new THREE.Euler().setFromQuaternion(qL, 'XYZ');
+
+    const positions = [posL.x, posL.y, posL.z, 0] as [number, number, number, number];
+
+    const out: Record<string, unknown> = {
+      ...base,
+      positions,
+      position: positions,
+      rotation: [eL.x, eL.y, eL.z],
+      coordinate_frame: 'home_local',
+    };
+
+    if (furniture.isOnWall()) {
+      const wp = furniture.getWallPlacement();
+      if (wp) {
+        const wallId = this.findWallIdForWorldPlacement(wp);
+        if (wallId) {
+          out.wall_side_id = wallId;
+        }
+      }
+    }
+
+    return out;
+  }
+
   serializeScene(): Record<string, unknown> {
     const deployedItems: Record<string, unknown> = {};
 
@@ -1095,8 +1282,8 @@ export class SceneManager {
       const catalogId = furniture.getId().includes('-') 
         ? furniture.getId().split('-')[0] 
         : furniture.getId();
-      
-      deployedItems[catalogId] = furniture.serialize();
+
+      deployedItems[catalogId] = this.serializeFurnitureForStorage(furniture);
     });
 
     return {
