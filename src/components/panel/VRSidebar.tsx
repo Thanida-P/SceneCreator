@@ -62,6 +62,13 @@ const baseSidebarItems: SidebarItemData[] = [
     color: "#F59E0B",
     description: "Personalize scene",
   },
+  {
+    id: "avatar",
+    icon: "🧍",
+    label: "Avatar",
+    color: "#6366F1",
+    description: "3rd person view",
+  },
 ];
 
 const SIDEBAR_WIDTH = 0.25;
@@ -157,17 +164,17 @@ interface VRSidebarProps {
   show: boolean;
   onItemSelect: (itemId: string) => void;
   extraItems?: SidebarItemData[];
-  hiddenItemIds?: string[];
 }
 
 export function VRSidebar({
   show,
   onItemSelect,
   extraItems = [],
+  activeItemId,
   hiddenItemIds = [],
 }: VRSidebarProps) {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
-  const [activeItem, setActiveItem] = useState<string | null>(null);
+  const [internalActiveItem, setInternalActiveItem] = useState<string | null>(null);
 
   if (!show) return null;
 
@@ -176,8 +183,10 @@ export function VRSidebar({
     ? allItems.filter((item) => !hiddenItemIds.includes(item.id))
     : allItems;
 
+  const activeItem = activeItemId !== undefined ? activeItemId : internalActiveItem;
+
   const handleItemClick = (itemId: string) => {
-    setActiveItem(itemId);
+    setInternalActiveItem(itemId);
     onItemSelect(itemId);
   };
 
