@@ -840,7 +840,6 @@ export class SceneManager {
 
     const wallNormal = wallPlacement.wallNormal;
     const wallPosition = wallPlacement.wallPosition;
-    const wallOffset = 0.02;
 
     // Apply in/out from wall with max-distance constraint
     if (Math.abs(deltaInOut) >= 0.001) {
@@ -861,20 +860,13 @@ export class SceneManager {
       newPosition[1] = posWithInOut[1];
       newPosition[2] = posWithInOut[2];
     } else {
-      // Keep flush to wall
-      if (Math.abs(wallNormal[0]) > Math.abs(wallNormal[2])) {
-        if (wallNormal[0] > 0) {
-          newPosition[0] = wallPosition + wallOffset;
-        } else {
-          newPosition[0] = wallPosition - wallOffset;
-        }
-      } else {
-        if (wallNormal[2] > 0) {
-          newPosition[2] = wallPosition + wallOffset;
-        } else {
-          newPosition[2] = wallPosition - wallOffset;
-        }
-      }
+      // Preserve the current distance from the wall
+      const currentDist = this.getDistanceFromWall(currentPosition, wallPlacement);
+      const preservedDist = Math.max(0, Math.min(MAX_WALL_MOUNT_DISTANCE, currentDist));
+      const posWithDist = this.clampPositionToWallDistance(newPosition, wallPlacement, preservedDist);
+      newPosition[0] = posWithDist[0];
+      newPosition[1] = posWithDist[1];
+      newPosition[2] = posWithDist[2];
     }
     
     // Check if the new position would hit another wall
@@ -962,11 +954,26 @@ export class SceneManager {
     }
     
     furniture.setPosition(newPosition);
-    
+    this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+
     if (this.config.enableCollisionDetection) {
+      const hasAABBCollision = this.collisionDetector.checkAABBCollisionOnly(id);
+
+      if (hasAABBCollision) {
+        furniture.setPosition(currentPosition);
+        this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+        furniture.setCollision(true);
+        return {
+          success: false,
+          needsConfirmation: true,
+          needsPreciseCheck: false,
+          reason: 'Close to another object',
+        };
+      }
+
       await this.updateFurnitureCollision(id);
     }
-    
+
     return { success: true, needsConfirmation: false, needsPreciseCheck: false };
   }
 
