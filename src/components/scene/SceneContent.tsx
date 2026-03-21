@@ -206,6 +206,7 @@ interface SceneState {
   lassoStart: { x: number; y: number } | null;
   lassoPreview: { x: number; y: number; width: number; height: number } | null;
   isLassoDrawing: boolean;
+  immersiveSessionKind: 'vr' | 'ar' | null;
 }
 
 class SceneContentLogic {
@@ -229,10 +230,12 @@ class SceneContentLogic {
   public modelUrlCache: Map<number, string> = new Map();
   private prevTriggerState: Map<string, boolean> = new Map();
   private xrStore: any = null;
+  private xrStoreUnsubscribe: (() => void) | null = null;
   private isRequestingAR: boolean = false;
   private cornerSelectionReady: boolean = false;
   private alignmentReady: boolean = false;
   private initialXRMode: 'vr' | 'ar' | null = null;
+  private pendingARAfterAlignment = false;
   private homeWorldMatrixBeforeAlignment: THREE.Matrix4 | null = null;
 
   private textureCache: Map<string, TextureOption[]> = new Map();
@@ -315,6 +318,7 @@ class SceneContentLogic {
       showAvatarMode: false,
       avatarLoadError: false,
       selectedAvatarIndex: parseInt(localStorage.getItem("selectedAvatarIndex") ?? "4", 10),
+      immersiveSessionKind: null,
     };
   }
 
@@ -325,6 +329,13 @@ class SceneContentLogic {
   updateState(update: Partial<SceneState>): void {
     this.state = { ...this.state, ...update };
     this.setState(update);
+    if (
+      'homeTransparent' in update ||
+      'showHeadTrackingAlignment' in update ||
+      'alignmentARModeRequested' in update
+    ) {
+      this.syncImmersiveSessionKindFromXRStore();
+    }
   }
 
   initializeManagers(scene: THREE.Scene): void {
@@ -393,7 +404,45 @@ class SceneContentLogic {
   }
 
   setXRStore(xrStore: any): void {
+    if (this.xrStoreUnsubscribe) {
+      this.xrStoreUnsubscribe();
+      this.xrStoreUnsubscribe = null;
+    }
     this.xrStore = xrStore;
+    if (xrStore?.subscribe) {
+      this.xrStoreUnsubscribe = xrStore.subscribe(() => {
+        this.syncImmersiveSessionKindFromXRStore();
+      });
+    }
+    this.syncImmersiveSessionKindFromXRStore();
+  }
+
+  private syncImmersiveSessionKindFromXRStore(): void {
+    if (!this.xrStore) {
+      if (this.state.immersiveSessionKind !== null) {
+        this.updateState({ immersiveSessionKind: null });
+      }
+      return;
+    }
+    const s = this.xrStore.getState();
+    const session = s.session;
+    const rawMode =
+      (session && (session as { mode?: XRSessionMode }).mode) ?? s.mode ?? null;
+
+    let next: 'vr' | 'ar' | null = null;
+    if (rawMode === 'immersive-vr') {
+      next = 'vr';
+    } else if (rawMode === 'immersive-ar') {
+      const borrowingARForAlignment =
+        this.state.showHeadTrackingAlignment || this.state.alignmentARModeRequested;
+      const userChosePassthroughAR =
+        this.state.homeTransparent && !borrowingARForAlignment;
+      next = userChosePassthroughAR ? 'ar' : 'vr';
+    }
+
+    if (this.state.immersiveSessionKind !== next) {
+      this.updateState({ immersiveSessionKind: next });
+    }
   }
 
   async requestARMode(): Promise<void> {
@@ -488,6 +537,12 @@ class SceneContentLogic {
   }
 
   cleanup(): void {
+    if (this.xrStoreUnsubscribe) {
+      this.xrStoreUnsubscribe();
+      this.xrStoreUnsubscribe = null;
+    }
+    this.xrStore = null;
+
     this.sceneManager?.dispose();
     this.navigationController?.reset();
     this.furnitureController?.reset();
@@ -1556,7 +1611,6 @@ class SceneContentLogic {
   // not fully working yet
   handleAlignmentConfirm(): void {
     const homeModel = this.sceneManager?.getHomeModel();
-    
     if (this.initialXRMode === 'ar') {
       this.updateState({
         alignmentStatus: "aligned",
@@ -1585,6 +1639,11 @@ class SceneContentLogic {
     }
     
     this.initialXRMode = null;
+
+    if (this.pendingARAfterAlignment) {
+      this.pendingARAfterAlignment = false;
+      void this.applyHomeTransparentXR(true);
+    }
   }
 
   // switch to manual alignment mode
@@ -1651,9 +1710,15 @@ class SceneContentLogic {
       alignmentARModeRequested: isAR,
       homeTransparent: isAR,
     });
+
+    if (this.pendingARAfterAlignment) {
+      this.pendingARAfterAlignment = false;
+      void this.applyHomeTransparentXR(true);
+    }
   }
 
   handleAlignmentCancel(): void {
+    this.pendingARAfterAlignment = false;
     this.homeWorldMatrixBeforeAlignment = null;
     // Cleanup hit test source
     if (this.navigationController) {
@@ -1719,26 +1784,35 @@ class SceneContentLogic {
     }
   }
 
-  async handleToggleHomeTransparency(): Promise<void> {
+  getSessionMode(): 'vr' | 'ar' | null {
+    return this.state.immersiveSessionKind;
+  }
+
+  getPendingARAfterAlignment(): boolean {
+    return this.pendingARAfterAlignment;
+  }
+
+  setPendingARAfterAlignment(pending: boolean): void {
+    this.pendingARAfterAlignment = pending;
+  }
+
+  public async applyHomeTransparentXR(newTransparent: boolean): Promise<void> {
     const homeModel = this.sceneManager?.getHomeModel();
     if (!homeModel) return;
- 
-    const newTransparent = !this.state.homeTransparent;
-    
+
     if (newTransparent && this.xrStore) {
-      // Switch to AR mode
       try {
         if (navigator.xr && (navigator.xr as any).isSessionSupported) {
           const isARSupported = await (navigator.xr as any).isSessionSupported('immersive-ar');
-          
+
           if (isARSupported) {
             const currentSession = this.xrStore.getState().session;
             if (currentSession && (currentSession as any).mode !== 'immersive-ar') {
               const session = await (navigator.xr as any).requestSession('immersive-ar', {
                 requiredFeatures: ['local-floor'],
-                optionalFeatures: ['bounded-floor', 'hand-tracking', 'layers']
+                optionalFeatures: ['bounded-floor', 'hand-tracking', 'layers'],
               });
-              
+
               await currentSession.end();
               const gl = this.xrStore.getState().gl;
               if (gl && gl.xr) {
@@ -1751,21 +1825,39 @@ class SceneContentLogic {
         console.warn('Failed to switch to AR mode:', err);
       }
     } else if (!newTransparent && this.xrStore) {
-      // Switch to VR mode
       try {
         const currentSession = this.xrStore.getState().session;
         if (currentSession && (currentSession as any).mode === 'immersive-ar') {
           await currentSession.end();
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 500));
           await this.xrStore.enterVR();
         }
       } catch (err) {
         console.warn('Failed to switch to VR mode:', err);
       }
     }
-    
+
     homeModel.setTransparent(newTransparent);
     this.updateState({ homeTransparent: newTransparent });
+  }
+
+  async handleToggleHomeTransparency(): Promise<void> {
+    const homeModel = this.sceneManager?.getHomeModel();
+    if (!homeModel) return;
+
+    const newTransparent = !this.state.homeTransparent;
+    if (
+      newTransparent &&
+      this.state.alignmentMode === 'free' &&
+      this.state.alignmentStatus === 'aligned'
+    ) {
+      this.pendingARAfterAlignment = true;
+      this.updateState({ showControlPanel: false });
+      this.handleAlignmentModeSelect('world');
+      return;
+    }
+
+    await this.applyHomeTransparentXR(newTransparent);
   }
 
   handleToggleExperienceMode(): void {
@@ -3304,6 +3396,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     showAvatarMode: false,
     avatarLoadError: false,
     selectedAvatarIndex: 4,
+    immersiveSessionKind: null,
   });
 
   const logicRef = useRef<SceneContentLogic | null>(null);
@@ -3712,6 +3805,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           onClose={() => logic.updateState({ showControlPanel: false })}
           alignmentMode={state.alignmentMode}
           onToggleAlignment={() => logic.handleToggleAlignmentMode()}
+          showAlignmentToggle={state.immersiveSessionKind === 'vr'}
           homeTransparent={state.homeTransparent}
           onToggleTransparency={() => logic.handleToggleHomeTransparency()}
           experienceMode={state.experienceMode}
@@ -3745,6 +3839,10 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
               update.awaitingCollisionAck = false;
             }
             if (state.waitingForAlignmentConfirmation) {
+              if (logic.getPendingARAfterAlignment()) {
+                logic.setPendingARAfterAlignment(false);
+                void logic.applyHomeTransparentXR(true);
+              }
               update.waitingForAlignmentConfirmation = false;
               update.showInstructions = true;
             }

@@ -11,6 +11,7 @@ export function VRControlPanel({
   saving = false,
   alignmentMode,
   onToggleAlignment,
+  showAlignmentToggle = false,
   homeTransparent = false,
   onToggleTransparency,
   experienceMode = false,
@@ -25,6 +26,7 @@ export function VRControlPanel({
   onClose: () => void;
   alignmentMode?: 'world' | 'free' | null;
   onToggleAlignment?: () => void;
+  showAlignmentToggle?: boolean;
   homeTransparent?: boolean;
   onToggleTransparency?: () => void;
   experienceMode?: boolean;
@@ -38,6 +40,10 @@ export function VRControlPanel({
   const panelHeight = 1.3;
   const buttonWidth = 0.57;
   const buttonHeight = 0.1;
+
+  const alignRowShown =
+    showAlignmentToggle && !!alignmentMode && !!onToggleAlignment;
+  const yBelowHelp = alignRowShown ? 0 : 0.155;
 
   return (
     <group>
@@ -157,8 +163,7 @@ export function VRControlPanel({
         </mesh>
       </group>
 
-      {/* Alignment Mode Toggle Button */}
-      {alignmentMode && onToggleAlignment && (
+      {showAlignmentToggle && alignmentMode && onToggleAlignment && (
         <>
           <group position={[0, 0.08, 0.01]}>
             <mesh
@@ -202,177 +207,178 @@ export function VRControlPanel({
         </>
       )}
 
-      {/* Mode Switch */}
-      {onToggleTransparency && (
-        <>
-          <group position={[0, -0.075, 0.01]}>
-            <mesh
-              onPointerEnter={(e) => {
-                e.stopPropagation();
-                setHoveredButton("transparency");
-              }}
-              onPointerLeave={(e) => {
-                e.stopPropagation();
-                setHoveredButton(null);
-              }}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                onToggleTransparency();
-              }}
-            >
-              <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
-              <meshStandardMaterial
-                color={hoveredButton === "transparency" ? "#A5D1E7" : "#66B9E2"}
-                emissive={hoveredButton === "transparency" ? "#66B9E2" : "#66B9E2"}
-                emissiveIntensity={hoveredButton === "transparency" ? 0.5 : 0.3}
-              />
-            </mesh>
-            <Text
-              position={[0, 0, 0.01]}
-              fontSize={0.04}
-              color="#334155"
-              anchorX="center"
-              anchorY="middle"
-              fontWeight={550}
-            >
-              {homeTransparent ? "Switch to VR" : "Switch to AR"}
-            </Text>
-          </group>
- 
-          <group position={[0, -0.09, 0]}>
-            <mesh>
-              <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
-            </mesh>
-          </group>
-        </>
-      )}
+      <group position={[0, yBelowHelp, 0]}>
+        {/* Mode Switch */}
+        {onToggleTransparency && (
+          <>
+            <group position={[0, -0.075, 0.01]}>
+              <mesh
+                onPointerEnter={(e) => {
+                  e.stopPropagation();
+                  setHoveredButton("transparency");
+                }}
+                onPointerLeave={(e) => {
+                  e.stopPropagation();
+                  setHoveredButton(null);
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onToggleTransparency();
+                }}
+              >
+                <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
+                <meshStandardMaterial
+                  color={hoveredButton === "transparency" ? "#A5D1E7" : "#66B9E2"}
+                  emissive={hoveredButton === "transparency" ? "#66B9E2" : "#66B9E2"}
+                  emissiveIntensity={hoveredButton === "transparency" ? 0.5 : 0.3}
+                />
+              </mesh>
+              <Text
+                position={[0, 0, 0.01]}
+                fontSize={0.04}
+                color="#334155"
+                anchorX="center"
+                anchorY="middle"
+                fontWeight={550}
+              >
+                {homeTransparent ? "Switch to VR" : "Switch to AR"}
+              </Text>
+            </group>
 
-      {/* Experience Mode Toggle */}
-      {onToggleExperienceMode && (
-        <>
-          <group position={[0, -0.225, 0.01]}>
-            <mesh
-              onPointerEnter={(e) => {
-                e.stopPropagation();
-                setHoveredButton("experienceMode");
-              }}
-              onPointerLeave={(e) => {
-                e.stopPropagation();
-                setHoveredButton(null);
-              }}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                onToggleExperienceMode();
-              }}
-            >
-              <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
-              <meshStandardMaterial
-                color={hoveredButton === "experienceMode" ? "#A5D1E7" : experienceMode ? "#FFB84D" : "#66B9E2"}
-                emissive={hoveredButton === "experienceMode" ? "#66B9E2" : experienceMode ? "#FFB84D" : "#66B9E2"}
-                emissiveIntensity={hoveredButton === "experienceMode" ? 0.5 : experienceMode ? 0.4 : 0.3}
-              />
-            </mesh>
-            <Text
-              position={[0, 0, 0.01]}
-              fontSize={0.04}
-              color="#334155"
-              anchorX="center"
-              anchorY="middle"
-              fontWeight={550}
-            >
-              {experienceMode ? "Switch to Editing Mode" : "Switch to Experience Mode"}
-            </Text>
-          </group>
+            <group position={[0, -0.09, 0]}>
+              <mesh>
+                <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
+              </mesh>
+            </group>
+          </>
+        )}
 
-          <group position={[0, -0.24, 0]}>
-            <mesh>
-              <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
-            </mesh>
-          </group>
-        </>
-      )}
- 
+        {/* Experience Mode Toggle */}
+        {onToggleExperienceMode && (
+          <>
+            <group position={[0, -0.225, 0.01]}>
+              <mesh
+                onPointerEnter={(e) => {
+                  e.stopPropagation();
+                  setHoveredButton("experienceMode");
+                }}
+                onPointerLeave={(e) => {
+                  e.stopPropagation();
+                  setHoveredButton(null);
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onToggleExperienceMode();
+                }}
+              >
+                <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
+                <meshStandardMaterial
+                  color={hoveredButton === "experienceMode" ? "#A5D1E7" : experienceMode ? "#FFB84D" : "#66B9E2"}
+                  emissive={hoveredButton === "experienceMode" ? "#66B9E2" : experienceMode ? "#FFB84D" : "#66B9E2"}
+                  emissiveIntensity={hoveredButton === "experienceMode" ? 0.5 : experienceMode ? 0.4 : 0.3}
+                />
+              </mesh>
+              <Text
+                position={[0, 0, 0.01]}
+                fontSize={0.04}
+                color="#334155"
+                anchorX="center"
+                anchorY="middle"
+                fontWeight={550}
+              >
+                {experienceMode ? "Switch to Editing Mode" : "Switch to Experience Mode"}
+              </Text>
+            </group>
 
-      {/* Back Button */}
-      <group position={[0, -0.375, 0.01]}>
-        <mesh
-          onPointerEnter={(e) => {
-            e.stopPropagation();
-            setHoveredButton("back");
-          }}
-          onPointerLeave={(e) => {
-            e.stopPropagation();
-            setHoveredButton(null);
-          }}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            onBack();
-          }}
-        >
-          <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
-          <meshStandardMaterial
-            color={hoveredButton === "back" ? "#A5D1E7" : "#66B9E2"}
-            emissive={hoveredButton === "back" ? "#66B9E2" : "#66B9E2"}
-            emissiveIntensity={hoveredButton === "back" ? 0.5 : 0.3}
-          />
-        </mesh>
-        <Text
-          position={[0, 0, 0.01]}
-          fontSize={0.04}
-          color="#334155"
-          anchorX="center"
-          anchorY="middle"
-          fontWeight={550}
-        >
-          Back to Home
-        </Text>
-      </group>
+            <group position={[0, -0.24, 0]}>
+              <mesh>
+                <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
+              </mesh>
+            </group>
+          </>
+        )}
 
-      <group position={[0, -0.39, 0]}>
-        <mesh>
-          <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
-        </mesh>
-      </group>
+        {/* Back Button */}
+        <group position={[0, -0.375, 0.01]}>
+          <mesh
+            onPointerEnter={(e) => {
+              e.stopPropagation();
+              setHoveredButton("back");
+            }}
+            onPointerLeave={(e) => {
+              e.stopPropagation();
+              setHoveredButton(null);
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onBack();
+            }}
+          >
+            <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
+            <meshStandardMaterial
+              color={hoveredButton === "back" ? "#A5D1E7" : "#66B9E2"}
+              emissive={hoveredButton === "back" ? "#66B9E2" : "#66B9E2"}
+              emissiveIntensity={hoveredButton === "back" ? 0.5 : 0.3}
+            />
+          </mesh>
+          <Text
+            position={[0, 0, 0.01]}
+            fontSize={0.04}
+            color="#334155"
+            anchorX="center"
+            anchorY="middle"
+            fontWeight={550}
+          >
+            Back to Home
+          </Text>
+        </group>
 
-      {/* Logout Button */}
-      <group position={[0, -0.525, 0.01]}>
-        <mesh
-          onPointerEnter={(e) => {
-            e.stopPropagation();
-            setHoveredButton("logout");
-          }}
-          onPointerLeave={(e) => {
-            e.stopPropagation();
-            setHoveredButton(null);
-          }}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            onLogout();
-          }}
-        >
-          <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
-          <meshStandardMaterial
-            color={hoveredButton === "logout" ? "#FF8F8F" : "#fd7171"}
-            emissive={hoveredButton === "logout" ? "#fd7171" : "#fd7171"}
-            emissiveIntensity={hoveredButton === "logout" ? 0.5 : 0.3}
-          />
-        </mesh>
-        <Text
-          position={[0, 0, 0.01]}
-          fontSize={0.04}
-          color="#334155"
-          anchorX="center"
-          anchorY="middle"
-          fontWeight={550}
-        >
-          Logout
-        </Text>
-      </group>
+        <group position={[0, -0.39, 0]}>
+          <mesh>
+            <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
+          </mesh>
+        </group>
 
-      <group position={[0, -0.54, 0]}>
-        <mesh>
-          <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
-        </mesh>
+        {/* Logout Button */}
+        <group position={[0, -0.525, 0.01]}>
+          <mesh
+            onPointerEnter={(e) => {
+              e.stopPropagation();
+              setHoveredButton("logout");
+            }}
+            onPointerLeave={(e) => {
+              e.stopPropagation();
+              setHoveredButton(null);
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onLogout();
+            }}
+          >
+            <RoundedPlane width={buttonWidth} height={buttonHeight} radius={0.03} />
+            <meshStandardMaterial
+              color={hoveredButton === "logout" ? "#FF8F8F" : "#fd7171"}
+              emissive={hoveredButton === "logout" ? "#fd7171" : "#fd7171"}
+              emissiveIntensity={hoveredButton === "logout" ? 0.5 : 0.3}
+            />
+          </mesh>
+          <Text
+            position={[0, 0, 0.01]}
+            fontSize={0.04}
+            color="#334155"
+            anchorX="center"
+            anchorY="middle"
+            fontWeight={550}
+          >
+            Logout
+          </Text>
+        </group>
+
+        <group position={[0, -0.54, 0]}>
+          <mesh>
+            <ButtonBackground width={buttonWidth} height={buttonHeight} radius={0.03} colorTop="#000000" colorBottom="#000000" opacity={0.15} />
+          </mesh>
+        </group>
       </group>
     </group>
   );
