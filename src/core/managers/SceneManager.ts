@@ -472,16 +472,13 @@ export class SceneManager {
           reason: 'Beyond max distance from wall',
         };
       }
-      if (distance < 0) {
-        const clamped = this.clampPositionToWallDistance(
-          newPosition,
-          wallPlacement,
-          0
-        );
-        newPosition[0] = clamped[0];
-        newPosition[1] = clamped[1];
-        newPosition[2] = clamped[2];
-      }
+
+      const currentDist = this.getDistanceFromWall(originalPosition, wallPlacement);
+      const preservedDist = Math.max(0, Math.min(MAX_WALL_MOUNT_DISTANCE, currentDist));
+      const posWithDist = this.clampPositionToWallDistance(newPosition, wallPlacement, preservedDist);
+      newPosition[0] = posWithDist[0];
+      newPosition[1] = posWithDist[1];
+      newPosition[2] = posWithDist[2];
     }
 
     // Save last valid position
@@ -984,6 +981,7 @@ export class SceneManager {
       await this.updateFurnitureCollision(id);
     }
 
+    this.lastValidPositions.set(id, furniture.getPosition());
     return { success: true, needsConfirmation: false, needsPreciseCheck: false };
   }
 
