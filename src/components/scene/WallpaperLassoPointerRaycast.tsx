@@ -11,7 +11,7 @@ export function WallpaperLassoPointerRaycast({
   lassoHandledByPrimitiveRef,
 }: {
   active: boolean;
-  getPlaneMesh: () => THREE.Mesh<THREE.PlaneGeometry> | null;
+  getPlaneMesh: () => THREE.Mesh | null;
   lassoFirstCorner: { x: number; y: number } | null;
   onUpdatePreview: (rect: { x: number; y: number; width: number; height: number }) => void;
   onLassoPoint: (localPoint: { x: number; y: number }) => void;
