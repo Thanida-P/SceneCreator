@@ -169,6 +169,7 @@ export class NavigationController extends XRControllerBase {
   }
 
   setAlignmentMode(enabled: boolean): void {
+    if (this.alignmentMode === enabled) return;
     this.alignmentMode = enabled;
     if (!enabled) {
       this.resetAlignment();
@@ -238,15 +239,27 @@ export class NavigationController extends XRControllerBase {
     this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
   }
 
+  private getFloorCornerInGroupLocal(semanticIndex: number): THREE.Vector3 | null {
+    if (!this.homeModelGroup) return null;
+    this.homeModelGroup.updateMatrixWorld(true);
+    const corners = this.getModelCorners();
+    const entry = corners.find((c) => c.index === semanticIndex);
+    if (!entry) return null;
+    const inv = new THREE.Matrix4().copy(this.homeModelGroup.matrixWorld).invert();
+    return entry.position.clone().applyMatrix4(inv);
+  }
+
   selectCorner(cornerIndex: number): void {
     if (this.alignmentState !== 'selectingCorner' || !this.boundingBox || !this.homeModelGroup) return;
-    
+
+    this.homeModelGroup.updateMatrixWorld(true);
     const corners = this.getModelCorners();
-    const cornersLocal = this.getModelCornersLocal();
-    if (cornerIndex < 0 || cornerIndex >= corners.length) return;
-    
-    this.alignmentData.selectedCorner = corners[cornerIndex]; 
-    this.alignmentData.firstCornerModelPos = cornersLocal[cornerIndex].position.clone();
+    const worldCorner = corners.find((c) => c.index === cornerIndex);
+    if (!worldCorner) return;
+
+    const inv = new THREE.Matrix4().copy(this.homeModelGroup.matrixWorld).invert();
+    this.alignmentData.selectedCorner = worldCorner;
+    this.alignmentData.firstCornerModelPos = worldCorner.position.clone().applyMatrix4(inv);
 
     this.alignmentState = 'aligningFirstCorner';
     this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
@@ -273,14 +286,15 @@ export class NavigationController extends XRControllerBase {
       return;
     }
     
-    const cornersLocal = this.getModelCornersLocal();
     const secondCornerIndex = (this.alignmentData.selectedCorner.index + 1) % 4;
+    const secondLocal = this.getFloorCornerInGroupLocal(secondCornerIndex);
+    if (!secondLocal) return;
 
     const position = worldPosition.clone();
     position.y = 0;
     
     this.alignmentData.secondCornerWorldPos = position;
-    this.alignmentData.secondCornerModelPos = cornersLocal[secondCornerIndex].position.clone();
+    this.alignmentData.secondCornerModelPos = secondLocal;
     
     this.alignmentState = 'aligningThirdCorner';
     this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
@@ -292,14 +306,15 @@ export class NavigationController extends XRControllerBase {
       return;
     }
     
-    const cornersLocal = this.getModelCornersLocal();
     const thirdCornerIndex = (this.alignmentData.selectedCorner.index + 2) % 4;
+    const thirdLocal = this.getFloorCornerInGroupLocal(thirdCornerIndex);
+    if (!thirdLocal) return;
 
     const position = worldPosition.clone();
     position.y = 0;
     
     this.alignmentData.thirdCornerWorldPos = position;
-    this.alignmentData.thirdCornerModelPos = cornersLocal[thirdCornerIndex].position.clone();
+    this.alignmentData.thirdCornerModelPos = thirdLocal;
     
     this.alignmentState = 'aligningFourthCorner';
     this.onAlignmentStateChange?.(this.alignmentState, this.alignmentData);
@@ -311,14 +326,15 @@ export class NavigationController extends XRControllerBase {
       return;
     }
     
-    const cornersLocal = this.getModelCornersLocal();
     const fourthCornerIndex = (this.alignmentData.selectedCorner.index + 3) % 4;
+    const fourthLocal = this.getFloorCornerInGroupLocal(fourthCornerIndex);
+    if (!fourthLocal) return;
 
     const position = worldPosition.clone();
     position.y = 0;
     
     this.alignmentData.fourthCornerWorldPos = position;
-    this.alignmentData.fourthCornerModelPos = cornersLocal[fourthCornerIndex].position.clone();
+    this.alignmentData.fourthCornerModelPos = fourthLocal;
     
     const transform = this.calculateTransform();
     if (transform && this.homeModelGroup) {
@@ -371,20 +387,6 @@ export class NavigationController extends XRControllerBase {
       position: corner.position.clone().applyMatrix4(this.homeModelGroup!.matrixWorld),
       index: corner.index,
     }));
-  }
-
-  private getModelCornersLocal(): Corner[] {
-    const box = this.localBBox || this.computeLocalBoundingBox();
-    if (!box) return [];
-    
-    const maxY = box.max.y;
-    
-    return [
-      { position: new THREE.Vector3(box.min.x, maxY, box.min.z), index: 0 },
-      { position: new THREE.Vector3(box.max.x, maxY, box.min.z), index: 1 },
-      { position: new THREE.Vector3(box.max.x, maxY, box.max.z), index: 2 },
-      { position: new THREE.Vector3(box.min.x, maxY, box.max.z), index: 3 },
-    ];
   }
 
   private calculateTransform(): { position: THREE.Vector3; rotation: THREE.Euler } | null {
