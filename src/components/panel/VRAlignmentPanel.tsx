@@ -44,7 +44,7 @@ export function VRAlignmentPanel({ show, onSelectMode }: VRAlignmentPanelProps) 
         anchorY="middle"
         fontWeight="bold"
       >
-        Welcome to VR Scene Creator
+        Welcome to your Virtual Home
       </Text>
 
       {/* Description */}
@@ -55,7 +55,7 @@ export function VRAlignmentPanel({ show, onSelectMode }: VRAlignmentPanelProps) 
         anchorX="center"
         anchorY="middle"
       >
-        Please choose your alignment mode:
+        Please choose your navigation mode:
       </Text>
 
       {/* Align World Button */}
@@ -98,7 +98,7 @@ export function VRAlignmentPanel({ show, onSelectMode }: VRAlignmentPanelProps) 
           anchorX="center"
           anchorY="middle"
         >
-          Use controllers to position the model
+          Enter alignment mode setup
         </Text>
       </group>
 
