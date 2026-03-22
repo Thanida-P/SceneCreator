@@ -66,9 +66,9 @@ export function WallpaperCutoutPanel({
           Cut out doors or windows?
         </Text>
         <Text
-          position={[0, panelHeight / 2 - 0.18, 0.01]}
+          position={[0, panelHeight / 2 - 0.15, 0.01]}
           fontSize={0.028}
-          color="#3B82F6"
+          color="#1E293B"
           anchorX="center"
           anchorY="middle"
           maxWidth={panelWidth - 0.2}
@@ -77,7 +77,7 @@ export function WallpaperCutoutPanel({
           {wallpaperName}
         </Text>
         <group
-          position={[0, 0.05, 0.01]}
+          position={[0, 0, 0.01]}
           onPointerEnter={(e) => {
             e.stopPropagation();
             setHoveredId("yes");
@@ -104,7 +104,7 @@ export function WallpaperCutoutPanel({
           </Text>
         </group>
         <group
-          position={[0, -0.05, 0.01]}
+          position={[0, -0.11, 0.01]}
           onPointerEnter={(e) => {
             e.stopPropagation();
             setHoveredId("no");
