@@ -1391,7 +1391,14 @@ class SceneContentLogic {
 
   handleAlignmentModeSelect(mode: "world" | "free"): void {
     if (mode === "world") {
-      this.skipAlignmentSessionSwap = this.state.alignmentStatus === "aligned";
+      const state = this.xrStore?.getState();
+      if (state?.session && state?.mode === 'immersive-vr') {
+          this.skipAlignmentSessionSwap = false;
+          this.xrStore.setState({ mode: "immersive-ar" });
+      } else {
+        this.skipAlignmentSessionSwap = this.state.alignmentStatus === "aligned";
+      }
+
       // model in VR mode
       const homeModel = this.sceneManager?.getHomeModel();
       if (homeModel) {
@@ -1543,7 +1550,6 @@ class SceneContentLogic {
                 }
                 
                 try {
-                  // not yet working to switch back to VR mode after AR alignment
                   if (navigator.xr && (navigator.xr as any).isSessionSupported) {
                     const isVRSupported = await (navigator.xr as any).isSessionSupported('immersive-vr');
                     if (isVRSupported) {
@@ -1914,7 +1920,6 @@ class SceneContentLogic {
       this.handleAlignmentModeSelect('world');
       return;
     }
-
     await this.applyHomeTransparentXR(newTransparent);
   }
 
@@ -3800,18 +3805,15 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showAlignmentPanel}>
         <VRAlignmentPanel 
           show={state.showAlignmentPanel} 
-          onSelectMode={(mode) => logic.handleAlignmentModeSelect(mode)} 
+          arFirstRequiresAlignment={!!arModeRequested}
+          onSelectMode={(mode) => {
+            if (arModeRequested) {
+              logic.setPendingARAfterAlignment(true);
+            }
+              logic.handleAlignmentModeSelect(mode);
+          }} 
         />
       </HeadLockedUI>
-
-      {/* <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showAlignmentConfirm}>
-        <VRAlignmentConfirmPanel 
-          show={state.showAlignmentConfirm} 
-          onConfirm={() => logic.handleAlignmentConfirm()} 
-          onCancel={() => logic.handleAlignmentCancel()} 
-        />
-      </HeadLockedUI> */}
-
       <HeadLockedUI distance={1.6} verticalOffset={0} enabled={state.showInstructions}>
         <VRInstructionPanel 
           show={state.showInstructions} 

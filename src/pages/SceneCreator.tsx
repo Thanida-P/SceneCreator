@@ -238,7 +238,11 @@ export function SceneCreator() {
             }}
             onClick={() => {
               setArModeRequested(false);
-              xrStore.enterVR().catch((err) => console.warn("Failed to enter VR:", err));
+              xrStore.enterVR()
+              .then(() => {
+                xrStore.setState({ mode: "immersive-vr" });
+              })
+              .catch((err) => console.warn("Failed to enter VR:", err));
             }}
           >
             Enter VR
