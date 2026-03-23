@@ -21,10 +21,11 @@ import { WallpaperCutoutPanel } from "../panel/WallpaperCutoutPanel";
 import { WallpaperLassoOverlay } from "./WallpaperLassoOverlay";
 import { WallpaperLassoPointerRaycast } from "./WallpaperLassoPointerRaycast";
 import { VRWhiteboardPanel } from "../panel/VRWhiteboardPanel";
-import { SceneManager, type WallInfo } from "../../core/managers/SceneManager";
+import { SceneManager, type WallInfo, MAX_WALL_MOUNT_DISTANCE } from "../../core/managers/SceneManager";
 import {
   FurnitureItem,
   FurnitureMetadata,
+  type WallPlacementInfo,
 } from "../../core/objects/FurnitureItem";
 import { WallpaperItem } from "../../core/objects/WallpaperItem";
 import { ClockWidget } from "../../core/objects/ClockWidget";
@@ -722,6 +723,90 @@ class SceneContentLogic {
       if (response.ok) {
         const data = await response.json();
 
+        const normalizePlacementMode = (pm: unknown): string => {
+          if (typeof pm !== "string") return "";
+          return pm.toLowerCase().trim();
+        };
+
+        const coerceWallPlacement = (wp: unknown): WallPlacementInfo | null => {
+          const raw = wp as any;
+          if (!raw) return null;
+
+          const wallNormalRaw = raw.wallNormal ?? raw.wall_normal;
+          const wallPositionRaw = raw.wallPosition ?? raw.wall_position;
+
+          if (!Array.isArray(wallNormalRaw) || wallNormalRaw.length < 3) return null;
+
+          const wallPositionNum = typeof wallPositionRaw === "number"
+            ? wallPositionRaw
+            : Number(wallPositionRaw);
+          if (!Number.isFinite(wallPositionNum)) return null;
+
+          const wallNormal: [number, number, number] = [
+            Number(wallNormalRaw[0]),
+            Number(wallNormalRaw[1]),
+            Number(wallNormalRaw[2]),
+          ];
+          if (!wallNormal.every((n) => Number.isFinite(n))) return null;
+
+          return { wallNormal, wallPosition: wallPositionNum };
+        };
+
+        const getWallPlacementFromRoomBoundarySideId = (
+          wallSideId: unknown
+        ): WallPlacementInfo | null => {
+          if (typeof wallSideId !== "string") return null;
+          const roomBoundary = this.sceneManager?.collisionDetector.getRoomBoundary();
+          if (!roomBoundary) return null;
+
+          const { min, max } = roomBoundary;
+          switch (wallSideId) {
+            case "wall-x-max":
+              return { wallNormal: [-1, 0, 0], wallPosition: max.x };
+            case "wall-x-min":
+              return { wallNormal: [1, 0, 0], wallPosition: min.x };
+            case "wall-z-min":
+              return { wallNormal: [0, 0, 1], wallPosition: min.z };
+            case "wall-z-max":
+              return { wallNormal: [0, 0, -1], wallPosition: max.z };
+            default:
+              return null;
+          }
+        };
+
+        const maybeMountWallIfCloseToBoundary = (
+          furniture: FurnitureItem,
+          position: [number, number, number]
+        ): void => {
+          if (!furniture.isWallMountable() || furniture.getWallPlacement()) return;
+          const roomBoundary = this.sceneManager?.collisionDetector.getRoomBoundary();
+          if (!roomBoundary) return;
+
+          const { min, max } = roomBoundary;
+          const x = position[0];
+          const z = position[2];
+
+          const candidates: Array<{
+            wallNormal: [number, number, number];
+            wallPosition: number;
+            dist: number;
+          }> = [
+            { wallNormal: [1, 0, 0], wallPosition: min.x, dist: Math.abs(x - min.x) },
+            { wallNormal: [-1, 0, 0], wallPosition: max.x, dist: Math.abs(x - max.x) },
+            { wallNormal: [0, 0, 1], wallPosition: min.z, dist: Math.abs(z - min.z) },
+            { wallNormal: [0, 0, -1], wallPosition: max.z, dist: Math.abs(z - max.z) },
+          ];
+
+          const nearest = candidates.reduce((best, c) => (c.dist < best.dist ? c : best), candidates[0]);
+          const mountTolerance = 0.2;
+          if (nearest.dist <= MAX_WALL_MOUNT_DISTANCE + mountTolerance) {
+            furniture.setWallPlacement({
+              wallNormal: nearest.wallNormal,
+              wallPosition: nearest.wallPosition,
+            });
+          }
+        };
+
         for (const itemObj of data.deployed_items) {
           const itemId = Object.keys(itemObj)[0];
           const itemData = itemObj[itemId];
@@ -752,9 +837,25 @@ class SceneContentLogic {
               furniture = new WeatherWidget(itemId, initialTransform);
             }
             if (furniture) {
-              if (sd?.placement_mode === "wall" && interp.wallPlacement) {
-                furniture.setWallPlacement(interp.wallPlacement);
+              const placementMode = normalizePlacementMode(sd?.placement_mode);
+              const shouldBeWallMounted =
+                placementMode === "wall" ||
+                Boolean(sd?.wall_placement) ||
+                Boolean(sd?.wall_side_id) ||
+                Boolean(interp.wallPlacement);
+
+              if (shouldBeWallMounted) {
+                const wp =
+                  coerceWallPlacement(interp.wallPlacement) ??
+                  coerceWallPlacement(sd?.wall_placement) ??
+                  getWallPlacementFromRoomBoundarySideId(sd?.wall_side_id) ??
+                  null;
+                if (wp) furniture.setWallPlacement(wp);
+                else furniture.setPlacementMode("wall");
               }
+
+              maybeMountWallIfCloseToBoundary(furniture, interp.position);
+
               await this.sceneManager.addFurniture(furniture);
               if (sd) {
                 this.sceneManager.registerDeployedSpatialSnapshot(
@@ -843,9 +944,24 @@ class SceneContentLogic {
             },
           );
 
-          if (sd?.placement_mode === "wall" && interp.wallPlacement) {
-            furniture.setWallPlacement(interp.wallPlacement);
+          const placementMode = normalizePlacementMode(sd?.placement_mode);
+          const shouldBeWallMounted =
+            placementMode === "wall" ||
+            Boolean(sd?.wall_placement) ||
+            Boolean(sd?.wall_side_id) ||
+            Boolean(interp.wallPlacement);
+
+          if (shouldBeWallMounted) {
+            const wp =
+              coerceWallPlacement(interp.wallPlacement) ??
+              coerceWallPlacement(sd?.wall_placement) ??
+              getWallPlacementFromRoomBoundarySideId(sd?.wall_side_id) ??
+              null;
+            if (wp) furniture.setWallPlacement(wp);
+            else furniture.setPlacementMode("wall");
           }
+
+          maybeMountWallIfCloseToBoundary(furniture, interp.position);
 
           await this.sceneManager.addFurniture(furniture);
           if (sd) {
