@@ -122,15 +122,22 @@ export class SceneManager {
       w: number,
       h: number
     ) => {
+      const worldNormal = toWorldNormal(lnx, lny, lnz);
+      const worldCenter = toWorldCenter(lx, ly, lz);
+      const worldWallPosition =
+        Math.abs(worldNormal[0]) > Math.abs(worldNormal[2])
+          ? worldCenter[0]
+          : worldCenter[2];
+
       walls.push({
         id,
         label,
-        wallNormal: toWorldNormal(lnx, lny, lnz),
+        wallNormal: worldNormal,
         localNormal: [lnx, lny, lnz],
-        wallPosition: 0,
+        wallPosition: worldWallPosition,
         width: w,
         height: h,
-        center: toWorldCenter(lx, ly, lz),
+        center: worldCenter,
       });
     };
     addWall('wall-x-max', 'Wall (East)', localBox.max.x - wallOffset, cy, cz, -1, 0, 0,
@@ -845,9 +852,6 @@ export class SceneManager {
       };
     }
 
-    const wallNormal = wallPlacement.wallNormal;
-    const wallPosition = wallPlacement.wallPosition;
-
     // Apply in/out from wall with max-distance constraint
     if (Math.abs(deltaInOut) >= 0.001) {
       const currentDist = this.getDistanceFromWall(currentPosition, wallPlacement);
@@ -1202,6 +1206,39 @@ export class SceneManager {
       const euler = new THREE.Euler().setFromQuaternion(quat, 'XYZ');
       furniture.setPosition([pos.x, pos.y, pos.z]);
       furniture.setRotation([euler.x, euler.y, euler.z]);
+
+      if (furniture.isOnWall?.()) {
+        const prevWp = furniture.getWallPlacement?.();
+        if (prevWp) {
+          const currentPos = furniture.getPosition();
+          const availableWalls = this.getAvailableWalls();
+
+          let bestWall: (typeof availableWalls)[number] | null = null;
+          let bestAbsDist = Infinity;
+
+          for (const w of availableWalls) {
+            const dist = this.getDistanceFromWall(currentPos, {
+              wallNormal: w.wallNormal,
+              wallPosition: w.wallPosition,
+            });
+            const absDist = Math.abs(dist);
+
+            if (absDist < bestAbsDist) {
+              bestAbsDist = absDist;
+              bestWall = w;
+            }
+          }
+
+          const tolerance = 0.5;
+          if (bestWall && bestAbsDist <= MAX_WALL_MOUNT_DISTANCE + tolerance) {
+            furniture.setWallPlacement({
+              wallNormal: bestWall.wallNormal,
+              wallPosition: bestWall.wallPosition,
+            });
+          }
+        }
+      }
+
       if (furniture.isWallpaper?.()) {
         (furniture as WallpaperItem).reorientPlaneToWall();
       }

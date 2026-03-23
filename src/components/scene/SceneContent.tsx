@@ -1798,8 +1798,10 @@ class SceneContentLogic {
         alignmentMode: "free",
         alignmentStatus: "aligned",
         showAlignmentPanel: false,
-        showAlignmentConfirm: false,
-        showInstructions: true,
+        showAlignmentConfirm: false,  
+        showInstructions: false,
+        waitingForAlignmentConfirmation: false,
+        navigationMode: false,
         showSidebar: true,
       });
     }
@@ -1825,6 +1827,7 @@ class SceneContentLogic {
       alignmentStatus: "aligning",
       alignmentState: 'idle',
       waitingForAlignmentConfirmation: false,
+      showAlignmentConfirm: false,
       legacyManualAlignment: true,
     });
 
@@ -1871,6 +1874,7 @@ class SceneContentLogic {
       legacyManualAlignment: false,
       showNotification: false,
       notificationFromControlPanel: false,
+      showAlignmentConfirm: false,
       showInstructions: true,
       showSidebar: true,
       alignmentARModeRequested: isAR,
@@ -1943,9 +1947,7 @@ class SceneContentLogic {
       if (this.state.homeTransparent) {
         this.sceneManager?.getHomeModel()?.setOpacity(0.0);
       }
-      this.updateState({
-        alignmentMode: "free",
-      });
+      this.handleAlignmentModeSelect("free");
     } else if (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free") {
       this.handleAlignmentModeSelect("world");
     }
@@ -3685,8 +3687,6 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
   const logic = logicRef.current;
   const uiLocked = state.showFurniture ||
     state.showControlPanel || 
-    state.showInstructions || 
-    state.showSlider || 
     state.showNotification ||
     state.showMoveCloserPanel ||
     state.showUnmountPanel ||
@@ -3810,7 +3810,6 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
               <React.Fragment key={furniture.getId()}>
                 <primitive
                   object={furniture.getGroup()}
-                  onClick={handleFurnitureClick}
                   onPointerDown={handlePointerDown}
                   onPointerMove={handlePointerMove}
                   onPointerUp={handlePointerUp}
@@ -4013,6 +4012,8 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
                 void logic.applyHomeTransparentXR(true);
               }
               update.waitingForAlignmentConfirmation = false;
+              update.showAlignmentConfirm = false;
+              update.showAlignmentPanel = false;
               update.showInstructions = true;
             }
             logic.updateState(update);
