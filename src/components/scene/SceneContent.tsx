@@ -111,6 +111,31 @@ function WhiteboardHitTarget({
   );
 }
 
+function FakeVRPassthroughBlocker({ enabled }: { enabled: boolean }) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const { camera } = useThree();
+
+  useFrame(() => {
+    if (!enabled || !meshRef.current) return;
+    meshRef.current.position.setFromMatrixPosition(camera.matrixWorld);
+  });
+
+  if (!enabled) return null;
+
+  return (
+    <mesh ref={meshRef} frustumCulled={false} renderOrder={-1000}>
+      <sphereGeometry args={[35, 32, 24]} />
+      <meshBasicMaterial
+        color="#808080"
+        side={THREE.BackSide}
+        depthTest={false}
+        depthWrite={false}
+        fog={false}
+      />
+    </mesh>
+  );
+}
+
 interface SceneContentProps {
   homeId: string;
   digitalHome?: {
@@ -1661,44 +1686,6 @@ class SceneContentLogic {
         showInstructions: true,
         showSidebar: true,
       });
-    }
-  }
-
-  // not fully working yet
-  handleAlignmentConfirm(): void {
-    const homeModel = this.sceneManager?.getHomeModel();
-    if (this.initialXRMode === 'ar') {
-      this.updateState({
-        alignmentStatus: "aligned",
-        showAlignmentConfirm: false,
-        showInstructions: true,
-        showSidebar: true,
-        alignmentARModeRequested: true,
-        homeTransparent: true,
-      });
-      
-      if (homeModel) {
-        homeModel.setOpacity(0.3);
-        homeModel.setTransparent(true);
-      }
-    } else {
-      if (this.state.homeTransparent) {
-        homeModel?.setOpacity(0.0);
-      }
-      this.updateState({
-        alignmentStatus: "aligned",
-        showAlignmentConfirm: false,
-        showInstructions: true,
-        showSidebar: true,
-        homeTransparent: this.state.homeTransparent,
-      });
-    }
-    
-    this.initialXRMode = null;
-
-    if (this.pendingARAfterAlignment) {
-      this.pendingARAfterAlignment = false;
-      void this.applyHomeTransparentXR(true);
     }
   }
 
@@ -3459,6 +3446,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
 
   const logicRef = useRef<SceneContentLogic | null>(null);
   const lassoHandledByPrimitiveRef = useRef(false);
+  const forcingOpaqueSessionRef = useRef(false);
 
   useEffect(() => {
     const updateState = (
@@ -3486,7 +3474,12 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     
     const sessionMode = (xr.session as any)?.mode;
     const isInAlignmentMode = state.showHeadTrackingAlignment;
-    if (sessionMode === 'immersive-ar' && !state.loading && !isInAlignmentMode) {
+    const shouldUsePassthroughAR =
+      state.homeTransparent ||
+      state.showHeadTrackingAlignment ||
+      state.alignmentARModeRequested ||
+      Boolean(arModeRequested);
+    if (sessionMode === 'immersive-ar' && !state.loading && !isInAlignmentMode && shouldUsePassthroughAR) {
       const homeModel = logicRef.current.sceneManager?.getHomeModel();
       if (homeModel) {
         homeModel.setVisible(true);
@@ -3496,7 +3489,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
         }
       }
     }
-  }, [xr.session, scene, camera]);
+  }, [xr.session, scene, camera, state.loading, state.showHeadTrackingAlignment, state.homeTransparent, state.alignmentARModeRequested, arModeRequested]);
   
   useEffect(() => {
     if (!xr.session || !logicRef.current || !arModeRequested) return;
@@ -3537,13 +3530,15 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
 
   const { gl } = useThree();
   
-  const isARAlignmentMode = state.showHeadTrackingAlignment;
   const xrSession = xr.session;
-  const isARSession = xrSession && (xrSession as any).mode === 'immersive-ar';
-  const isARMode = isARAlignmentMode ? (isARSession || state.homeTransparent) : (state.homeTransparent || isARSession);
+  const sessionState = xrStore.getState();
+  const isARSession = sessionState.session && sessionState.mode === "immersive-ar";
+  const wantsPassthroughAR = state.homeTransparent || state.showHeadTrackingAlignment || state.alignmentARModeRequested;
+  const isPassthroughARMode = Boolean(isARSession) && wantsPassthroughAR;
+  const isVRMode = Boolean(isARSession) && !isPassthroughARMode && !state.legacyManualAlignment && !state.waitingForAlignmentConfirmation;
   
   useEffect(() => {
-    if (isARMode) {
+    if (isPassthroughARMode) {
       gl.setClearColor(0x000000, 0);
       gl.domElement.style.backgroundColor = 'transparent';
       gl.autoClear = true;
@@ -3554,7 +3549,20 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       gl.setClearColor(0x808080, 1);
       gl.domElement.style.backgroundColor = '#808080';
     }
-  }, [isARMode, gl, isARAlignmentMode, isARSession, state.homeTransparent, xrSession]);
+  }, [isPassthroughARMode, gl, isARSession, state.homeTransparent, state.showHeadTrackingAlignment, state.alignmentARModeRequested, xrSession]);
+
+  useEffect(() => {
+    if (!logicRef.current || !isVRMode || forcingOpaqueSessionRef.current) return;
+    forcingOpaqueSessionRef.current = true;
+    void logicRef.current
+      .applyHomeTransparentXR(false)
+      .catch((err) => {
+        console.warn('Failed to force opaque VR session:', err);
+      })
+      .finally(() => {
+        forcingOpaqueSessionRef.current = false;
+      });
+  }, [isVRMode]);
 
   if (!logicRef.current) return null;
 
@@ -3594,11 +3602,12 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       {/* AR Session Handler */}
       <ARSessionHandler arModeRequested={arModeRequested || state.alignmentARModeRequested} />
 
-      {!isARMode && <color args={["#808080"]} attach="background" />}
+      {!isPassthroughARMode && <color args={["#808080"]} attach="background" />}
+      <FakeVRPassthroughBlocker enabled={isVRMode} />
       <PerspectiveCamera makeDefault position={[0, 1.6, 2]} fov={75} />
-      <ambientLight intensity={isARMode ? 0.2 : 0.5} />
-      <directionalLight position={[5, 5, 5]} intensity={isARMode ? 0.3 : 1} />
-      {!isARMode && <Environment preset="warehouse" />}
+      <ambientLight intensity={isPassthroughARMode ? 0.2 : 0.5} />
+      <directionalLight position={[5, 5, 5]} intensity={isPassthroughARMode ? 0.3 : 1} />
+      {!isPassthroughARMode && <Environment preset="warehouse" />}
 
       <group position={[0, 0, 0]}>
       {logic.sceneManager && (
