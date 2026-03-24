@@ -164,6 +164,8 @@ interface VRSidebarProps {
   show: boolean;
   onItemSelect: (itemId: string) => void;
   extraItems?: SidebarItemData[];
+  activeItemId?: string | null;
+  hiddenItemIds?: string[];
 }
 
 export function VRSidebar({
