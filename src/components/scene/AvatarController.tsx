@@ -390,13 +390,11 @@ class AvatarErrorBoundary extends React.Component<
 
 export interface AvatarControllerProps {
   avatarUrl?: string;
-  initialPosition?: [number, number, number];
   onLoadError?: () => void;
 }
 
 export function AvatarController({
   avatarUrl = DEFAULT_AVATAR_URL,
-  initialPosition = [0, 0, 0],
   onLoadError,
 }: AvatarControllerProps) {
   return (

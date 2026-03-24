@@ -260,7 +260,6 @@ class SceneContentLogic {
   private isRequestingAR: boolean = false;
   private cornerSelectionReady: boolean = false;
   private alignmentReady: boolean = false;
-  private initialXRMode: 'vr' | 'ar' | null = null;
   private pendingARAfterAlignment = false;
   private homeWorldMatrixBeforeAlignment: THREE.Matrix4 | null = null;
   private skipAlignmentSessionSwap = false;
@@ -1920,8 +1919,6 @@ class SceneContentLogic {
       alignmentARModeRequested: false,
       legacyManualAlignment: false,
     });
-    
-    this.initialXRMode = null;
   }
 
   handleCornerSelect(cornerIndex: number): void {
@@ -4198,7 +4195,6 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
         <AvatarController
           key={`avatar-${state.selectedAvatarIndex}`}
           avatarUrl={AVATAR_URL_MAP[state.selectedAvatarIndex]!}
-          initialPosition={[0, 0, 0]}
           onLoadError={() => logic.updateState({ avatarLoadError: true })}
         />
       )}
