@@ -109,8 +109,9 @@ export class WallpaperItem extends FurnitureItem {
     const imageUrl = base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`;
     const loader = new THREE.TextureLoader();
     const texture = loader.load(imageUrl);
-    texture.wrapS = THREE.ClampToEdgeWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(Math.max(this.wallWidth, 1), Math.max(this.wallHeight, 1));
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.colorSpace = THREE.SRGBColorSpace;
