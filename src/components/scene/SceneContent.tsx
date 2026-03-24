@@ -2382,7 +2382,7 @@ class SceneContentLogic {
     delta: THREE.Vector3,
   ): Promise<void> {
     if (!this.sceneManager) return;
-    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
+    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel || this.state.showMoveCloserPanel) return;
 
     const furniture = this.sceneManager.getFurniture(id);
     if (!furniture || furniture.isWallpaper?.()) return;
@@ -2434,6 +2434,7 @@ class SceneContentLogic {
     deltaHorizontal: number,
   ): Promise<void> {
     if (!this.sceneManager) return;
+    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel || this.state.showMoveCloserPanel) return;
 
     const furniture = this.sceneManager.getFurniture(id);
     if (!furniture || !furniture.isOnWall()) return;
@@ -3193,7 +3194,7 @@ class SceneContentLogic {
       });
       return;
     }
-    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
+    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel || this.state.showMoveCloserPanel) return;
 
     const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
     if (furniture?.isWallpaper?.()) return;
@@ -3246,7 +3247,7 @@ class SceneContentLogic {
 }
 
   handleRotationSliderChange(newRotation: number): void {
-    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel) return;
+    if (this.state.preciseCheckInProgress || this.state.awaitingCollisionAck || this.state.showPreciseCheckPanel || this.state.showMoveCloserPanel) return;
     this.updateState({ rotationValue: newRotation });
     if (this.state.selectedItemId && this.sceneManager) {
       const furniture = this.sceneManager.getFurniture(

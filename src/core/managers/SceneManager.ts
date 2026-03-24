@@ -63,15 +63,57 @@ export class SceneManager {
     this.scene.add(homeModel.getGroup());
     
     await homeModel.loadModel(this.scene);
-    
+
     const boundary = homeModel.getBoundary();
     if (boundary) {
       this.collisionDetector.setRoomBoundary(boundary);
     }
+
+    this.collisionDetector.clearStaticObjects();
+    this.registerHomeModelStaticFurniture();
   }
 
   getHomeModel(): HomeModel | null {
     return this.homeModel;
+  }
+
+  private registerHomeModelStaticFurniture(): void {
+    if (!this.homeModel) return;
+
+    const roomBox = this.collisionDetector.getRoomBoundary();
+
+    this.homeModel.getGroup().updateMatrixWorld(true);
+
+    const rw = roomBox ? roomBox.max.x - roomBox.min.x : Infinity;
+    const rh = roomBox ? roomBox.max.y - roomBox.min.y : Infinity;
+    const rd = roomBox ? roomBox.max.z - roomBox.min.z : Infinity;
+    const THRESHOLD = 0.85;
+
+    let index = 0;
+    // Traverse every mesh individually
+    this.homeModel.getGroup().traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+
+      const box = new THREE.Box3().setFromObject(child);
+      if (box.isEmpty()) return;
+
+      const size = new THREE.Vector3();
+      box.getSize(size);
+
+      // Skip objects smaller than 5 cm in every dimension
+      if (size.x < 0.05 && size.y < 0.05 && size.z < 0.05) return;
+
+      // Skip structural elements
+      const spansCount = [
+        size.x > rw * THRESHOLD,
+        size.y > rh * THRESHOLD,
+        size.z > rd * THRESHOLD,
+      ].filter(Boolean).length;
+      if (spansCount >= 2) return;
+
+      this.collisionDetector.registerStaticBox(index, box);
+      index++;
+    });
   }
 
   getAvailableWalls(): WallInfo[] {

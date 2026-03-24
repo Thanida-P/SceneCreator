@@ -27,6 +27,7 @@ export class CollisionDetector {
   private helperMeshes: Map<string, THREE.Mesh> = new Map();
   private showDebugBoxes: boolean = false;
   private readonly EPSILON = 0.01;
+  private readonly STATIC_PREFIX = 'static-home-';
 
   private constructor() {}
 
@@ -111,6 +112,22 @@ export class CollisionDetector {
     this.helperMeshes.delete(itemId);
   }
 
+  registerStaticBox(index: number, box: THREE.Box3): void {
+    this.furnitureBoxes.set(`${this.STATIC_PREFIX}${index}`, box);
+  }
+
+  clearStaticObjects(): void {
+    for (const key of [...this.furnitureBoxes.keys()]) {
+      if (key.startsWith(this.STATIC_PREFIX)) {
+        this.furnitureBoxes.delete(key);
+        this.furnitureTransforms.delete(key);
+        const helper = this.helperMeshes.get(key);
+        if (helper?.parent) helper.parent.remove(helper);
+        this.helperMeshes.delete(key);
+      }
+    }
+  }
+
   checkRoomCollision(itemId: string): CollisionResult {
     const box = this.furnitureBoxes.get(itemId);
     
@@ -190,8 +207,14 @@ export class CollisionDetector {
       if (otherId === itemId) continue;
       if (!box.intersectsBox(otherBox)) continue;
 
+      // Static home objects have no modelId — AABB overlap is sufficient
+      if (otherId.startsWith(this.STATIC_PREFIX)) {
+        collidingObjects.push(otherId);
+        continue;
+      }
+
       const hasPreciseOverlap = await this.checkModelsOverlapWithApi(itemId, otherId);
-      
+
       if (hasPreciseOverlap) {
         collidingObjects.push(otherId);
       }
