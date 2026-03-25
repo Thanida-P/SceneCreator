@@ -186,7 +186,7 @@ export function VRSidebar({
     onItemSelect(itemId);
     return;
   }
-    setActiveItem(itemId);
+    setActiveItem(prev => prev === itemId ? null : itemId);
     onItemSelect(itemId);
   };
 

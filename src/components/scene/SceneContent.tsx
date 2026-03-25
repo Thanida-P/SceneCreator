@@ -2079,6 +2079,26 @@ class SceneContentLogic {
 
   handleSidebarItemSelect(itemId: string): void {
     if (this.state.experienceMode) return;
+
+    if (this.state.sidebarActiveItem === itemId) {
+    this.updateState({
+      sidebarActiveItem: null,
+      showFurniture: false,
+      showControlPanel: false,
+      showTransformGizmo: false,
+      gizmoPosition: null,
+      showRotationGizmo: false,
+      rotationGizmoPosition: null,
+      showScalePanel: false,
+      showWallPanel: false,
+      showTexturePanel: false,
+      showEnvironmentPanel: false,
+      showSlider: false,
+      showInstructions: false,
+    });
+    return; 
+  }
+
     this.updateState({ sidebarActiveItem: itemId });
 
     switch (itemId) {
@@ -4143,27 +4163,6 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           <VRSidebar
             show={state.showSidebar && !state.experienceMode}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
-            activeItemId={state.sidebarActiveItem}
-            extraItems={
-              state.selectedItemId &&
-              logic.sceneManager?.isWallMounted(state.selectedItemId)
-                ? [
-                    {
-                      id: "wall",
-                      icon: "▤",
-                      label: "Wall",
-                      color: "#64748B",
-                      description: "Move in/out from wall",
-                    },
-                  ]
-                : undefined
-            }
-            hiddenItemIds={
-              state.selectedItemId &&
-              logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
-                ? ["movement", "rotation"]
-                : undefined
-            }
           />
         </group>
       </HeadLockedUI>
