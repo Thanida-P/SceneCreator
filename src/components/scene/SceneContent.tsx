@@ -47,7 +47,6 @@ import { AlignmentLineVisualization } from "../panel/AlignmentLineVisualization"
 import { ARSessionHandler } from "./ARSessionHandler";
 import { WeatherWidget } from "../../core/objects/WeatherWidget";
 import { TextureSelectorPanel, TextureOption } from "../panel/texture/TextureSelectorPanel";
-import { EnvironmentSelectorPanel, EnvironmentOption } from "../panel/texture/EnvironmentSelectorPanel";
 import { AvatarController, AVATAR_URL_MAP } from "./AvatarController";
 
 const DIGITAL_HOME_PLATFORM_BASE_URL = import.meta.env
@@ -197,8 +196,6 @@ interface SceneState {
   textureOptions: TextureOption[];
   selectedFurnitureTextureId: string | undefined;
   showEnvironmentPanel: boolean;
-  floorTextures: EnvironmentOption[];
-  wallTextures: EnvironmentOption[];
   selectedFloorId: string | undefined;
   selectedWallId: string | undefined;
   loadingEnvironment: boolean;
@@ -339,8 +336,6 @@ class SceneContentLogic {
       textureOptions: [],
       selectedFurnitureTextureId: undefined,
       showEnvironmentPanel: false,
-      floorTextures: [],
-      wallTextures: [],
       selectedFloorId: undefined,
       selectedWallId: undefined,
       loadingEnvironment: false,
@@ -583,12 +578,6 @@ class SceneContentLogic {
     this.textureCache.clear();
     this.textureLoadingCache.clear();
 
-    this.state.floorTextures.forEach((tex) => {
-      if (tex.imagePath) URL.revokeObjectURL(tex.imagePath);
-    });
-    this.state.wallTextures.forEach((tex) => {
-      if (tex.imagePath) URL.revokeObjectURL(tex.imagePath);
-    });
   }
 
   private applySavedHomeSpatialData(digitalHome?: SceneContentProps["digitalHome"]): void {
@@ -1194,257 +1183,6 @@ class SceneContentLogic {
 
   handleCloseTexturePanel(): void {
     this.updateState({ showTexturePanel: false });
-  }
-
-  async loadEnvironmentTextures(): Promise<void> {
-    this.updateState({ loadingEnvironment: true });
-    try {
-      const floorResponse = await makeAuthenticatedRequest(
-        `/digitalhomes/get_textures/${this.homeId}`,
-      );
-
-      if (floorResponse.ok) {
-        const floorData = await floorResponse.json();
-        const floorTextures = await this.processEnvironmentTextures(
-          floorData.textures,
-          "floor",
-        );
-        this.updateState({ floorTextures });
-      }
-
-      const wallResponse = await makeAuthenticatedRequest(
-        `/digitalhomes/get_floor_textures/${this.homeId}`,
-      );
-
-      if (wallResponse.ok) {
-        const wallData = await wallResponse.json();
-        const wallTextures = await this.processEnvironmentTextures(
-          wallData.textures,
-          "wall",
-        );
-        this.updateState({ wallTextures });
-      }
-    } catch (error) {
-      console.error("Error loading environment textures:", error);
-      this.showNotificationMessage(
-        "Failed to load environment textures",
-        "error",
-      );
-    } finally {
-      this.updateState({ loadingEnvironment: false });
-    }
-  }
-
-  private async processEnvironmentTextures(
-    textures: any[],
-    type: "floor" | "wall",
-  ): Promise<EnvironmentOption[]> {
-    const processedTextures: EnvironmentOption[] = [];
-    const textureLoaders: Promise<void>[] = [];
-
-    for (let index = 0; index < textures.length; index++) {
-      const texture = textures[index];
-
-      const loadPromise = (async () => {
-        try {
-          const base64String = texture.file;
-
-          const binaryString = atob(base64String);
-
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-
-          const blob = new Blob([bytes], { type: "image/jpeg" });
-
-          const blobUrl = URL.createObjectURL(blob);
-
-          const textureLoader = new THREE.TextureLoader();
-          const three3DTexture = await new Promise<THREE.Texture>(
-            (resolve, reject) => {
-              textureLoader.load(
-                blobUrl,
-                (loadedTexture) => {
-                  loadedTexture.wrapS = THREE.RepeatWrapping;
-                  loadedTexture.wrapT = THREE.RepeatWrapping;
-                  loadedTexture.magFilter = THREE.LinearFilter;
-                  loadedTexture.minFilter = THREE.LinearFilter;
-                  loadedTexture.needsUpdate = true;
-                  resolve(loadedTexture);
-                },
-                undefined,
-                reject,
-              );
-            },
-          );
-
-          processedTextures.push({
-            id: `${type}-texture-${texture.texture_id}`,
-            name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${index + 1}`,
-            type: type,
-            imagePath: blobUrl,
-            color: "#ffffff",
-            threeTexture: three3DTexture,
-          });
-        } catch (error) {
-          console.error(
-            `[ENV-TEXTURES] Failed to process ${type} texture ${texture.texture_id}:`,
-            error,
-          );
-        }
-      })();
-
-      textureLoaders.push(loadPromise);
-    }
-
-    await Promise.all(textureLoaders);
-
-    return processedTextures;
-  }
-
-  async handleSelectFloorTexture(
-    textureId: string,
-    texturePath: string,
-  ): Promise<void> {
-    if (!this.sceneManager) return;
-
-    try {
-      const homeModel = this.sceneManager.getHomeModel();
-      if (!homeModel) {
-        this.showNotificationMessage("Home model not loaded", "error");
-        return;
-      }
-
-      const textureLoader = new THREE.TextureLoader();
-
-      textureLoader.load(
-        texturePath,
-        (loadedTexture) => {
-          loadedTexture.wrapS = THREE.RepeatWrapping;
-          loadedTexture.wrapT = THREE.RepeatWrapping;
-          loadedTexture.repeat.set(20, 20);
-          loadedTexture.minFilter = THREE.LinearMipmapLinearFilter;
-          loadedTexture.magFilter = THREE.LinearFilter;
-          loadedTexture.anisotropy = 16;
-          loadedTexture.needsUpdate = true;
-
-          let floorCount = 0;
-          homeModel.getGroup().traverse((child) => {
-            if (child instanceof THREE.Mesh && child.material) {
-              if (child.name === "Floor" || child.name.includes("Floor")) {
-                const material = Array.isArray(child.material)
-                  ? child.material.map((m) => m.clone())
-                  : child.material.clone();
-
-                if (Array.isArray(material)) {
-                  material.forEach((m) => {
-                    m.map = loadedTexture;
-                    m.needsUpdate = true;
-                  });
-                } else {
-                  material.map = loadedTexture;
-                  material.needsUpdate = true;
-                }
-
-                child.material = material;
-                floorCount++;
-              }
-            }
-          });
-
-          if (floorCount === 0) {
-            this.showNotificationMessage(
-              "No floor meshes found in model",
-              "error",
-            );
-          } else {
-            this.updateState({ selectedFloorId: textureId });
-            
-          }
-        },
-        undefined,
-        (error) => {
-          console.error("[FLOOR-TEXTURE] Failed to load texture:", error);
-          this.showNotificationMessage("Failed to load floor texture", "error");
-        },
-      );
-    } catch (error) {
-      console.error("[FLOOR-TEXTURE] Error:", error);
-      this.showNotificationMessage("Failed to apply floor texture", "error");
-    }
-  }
-
-  async handleSelectWallTexture(
-    textureId: string,
-    texturePath: string,
-  ): Promise<void> {
-    if (!this.sceneManager) return;
-
-    try {
-      const homeModel = this.sceneManager.getHomeModel();
-      if (!homeModel) {
-        this.showNotificationMessage("Home model not loaded", "error");
-        return;
-      }
-
-      const textureLoader = new THREE.TextureLoader();
-
-      textureLoader.load(
-        texturePath,
-        (loadedTexture) => {
-          loadedTexture.wrapS = THREE.RepeatWrapping;
-          loadedTexture.wrapT = THREE.RepeatWrapping;
-          loadedTexture.repeat.set(20, 20);
-          loadedTexture.minFilter = THREE.LinearMipmapLinearFilter;
-          loadedTexture.magFilter = THREE.LinearFilter;
-          loadedTexture.anisotropy = 16;
-          loadedTexture.needsUpdate = true;
-
-          let wallCount = 0;
-          homeModel.getGroup().traverse((child) => {
-            if (child instanceof THREE.Mesh && child.material) {
-              if (child.name === "Wall" || child.name.includes("Wall")) {
-                const material = Array.isArray(child.material)
-                  ? child.material.map((m) => m.clone())
-                  : child.material.clone();
-
-                if (Array.isArray(material)) {
-                  material.forEach((m) => {
-                    m.map = loadedTexture;
-                    m.needsUpdate = true;
-                  });
-                } else {
-                  material.map = loadedTexture;
-                  material.needsUpdate = true;
-                }
-
-                child.material = material;
-                wallCount++;
-              }
-            }
-          });
-
-          if (wallCount === 0) {
-            console.warn("[WALL-TEXTURE] No wall meshes found!");
-            this.showNotificationMessage(
-              "No wall meshes found in model",
-              "error",
-            );
-          } else {
-            this.updateState({ selectedWallId: textureId });
-          }
-        },
-        undefined,
-        (error) => {
-          console.error("[WALL-TEXTURE] Failed to load texture:", error);
-          this.showNotificationMessage("Failed to load wall texture", "error");
-        },
-      );
-    } catch (error) {
-      console.error("[WALL-TEXTURE] Error:", error);
-      this.showNotificationMessage("Failed to apply wall texture", "error");
-    }
   }
 
   debugHomeModelStructure(): void {
@@ -2189,26 +1927,6 @@ class SceneContentLogic {
           showSlider: false,
           showTexturePanel: false,
           showEnvironmentPanel: false,
-        });
-        break;
-
-      case "environment":
-        if (
-          this.state.floorTextures.length === 0 &&
-          this.state.wallTextures.length === 0
-        ) {
-          this.loadEnvironmentTextures();
-        }
-        this.updateState({
-          showEnvironmentPanel: true,
-          showFurniture: false,
-          showControlPanel: false,
-          showTransformGizmo: false,
-          showRotationGizmo: false,
-          showScalePanel: false,
-          showTexturePanel: false,
-          showInstructions: false,
-          showSlider: false,
         });
         break;
 
@@ -3618,8 +3336,6 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     textureOptions: [],
     selectedFurnitureTextureId: undefined,
     showEnvironmentPanel: false,
-    floorTextures: [],
-    wallTextures: [],
     selectedFloorId: undefined,
     selectedWallId: undefined,
     loadingEnvironment: false,
@@ -4244,6 +3960,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           />
         </group>
       </HeadLockedUI>
+     
       <HeadLockedUI
         distance={1.4}
         verticalOffset={0}
@@ -4253,6 +3970,27 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           <VRSidebar
             show={state.showSidebar && !state.experienceMode}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
+            activeItemId={state.sidebarActiveItem}
+            extraItems={
+              state.selectedItemId &&
+              logic.sceneManager?.isWallMounted(state.selectedItemId)
+                ? [
+                    {
+                      id: "wall",
+                      icon: "▤",
+                      label: "Wall",
+                      color: "#64748B",
+                      description: "Move in/out from wall",
+                    },
+                  ]
+                : undefined
+            }
+            hiddenItemIds={
+              state.selectedItemId &&
+              logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
+                ? ["movement", "rotation"]
+                : undefined
+            }
           />
         </group>
       </HeadLockedUI>
@@ -4281,31 +4019,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
         />
       )}
 
-      <HeadLockedUI
-        distance={1.5}
-        verticalOffset={0}
-        enabled={state.showEnvironmentPanel}
-      >
-        `{" "}
-        <group position={[0, 0, 0]}>
-          <EnvironmentSelectorPanel
-            show={state.showEnvironmentPanel}
-            onSelectFloor={(id, path) =>
-              logic.handleSelectFloorTexture(id, path)
-            }
-            onSelectWall={(id, path) => logic.handleSelectWallTexture(id, path)}
-            onClose={() => logic.updateState({ showEnvironmentPanel: false })}
-            floorTextures={state.floorTextures}
-            wallTextures={state.wallTextures}
-            selectedFloorId={state.selectedFloorId}
-            selectedWallId={state.selectedWallId}
-            loadingFloor={state.loadingEnvironment}
-            loadingWall={state.loadingEnvironment}
-            title="Environment Settings"
-          />
-        </group>
-      </HeadLockedUI>
-      `
+    
     </>
   );
 }

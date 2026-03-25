@@ -10,6 +10,7 @@ interface SidebarItemData {
   color: string;
   description: string;
   conditional?: boolean;
+  
 }
 
 const baseSidebarItems: SidebarItemData[] = [
@@ -34,13 +35,7 @@ const baseSidebarItems: SidebarItemData[] = [
     color: "#EC4899",
     description: "Resize objects",
   },
-  {
-    id: "environment",
-    icon: "🏠",
-    label: "Environment",
-    color: "#06B6D4",
-    description: "Home textures",
-  },
+ 
   {
     id: "texture",
     icon: "🎨",
@@ -81,6 +76,7 @@ interface SidebarItemProps {
   onHover: (id: string | null) => void;
   onClick: (id: string) => void;
   isHovered: boolean;
+  
 }
 
 function SidebarItem({ item, yPos, isActive, onHover, onClick, isHovered }: SidebarItemProps) {
@@ -165,28 +161,30 @@ interface VRSidebarProps {
   onItemSelect: (itemId: string) => void;
   activeItemId?: string | null;
   hiddenItemIds?: string[];
+  extraItems?: SidebarItemData[];
 }
 
 export function VRSidebar({
   show,
   onItemSelect,
+  extraItems = [],
+  activeItemId,
+  hiddenItemIds = [],
 }: VRSidebarProps) {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
-  const [activeItem, setActiveItem] = useState<string | null>(null);
-
+  const [internalActiveItem, setInternalActiveItem] = useState<string | null>(null);
   if (!show) return null;
 
-  const sidebarItems: SidebarItemData[] = baseSidebarItems.map((item) => {
- 
-  return item;
-  });
+  const allItems = [...baseSidebarItems, ...extraItems];
+  const sidebarItems: SidebarItemData[] = hiddenItemIds.length > 0
+    ? allItems.filter((item) => !hiddenItemIds.includes(item.id))
+    : allItems;
+
+  const activeItem = activeItemId !== undefined ? activeItemId : internalActiveItem;
+
 
   const handleItemClick = (itemId: string) => {
-    if (itemId === "toggleModel") {
-    onItemSelect(itemId);
-    return;
-  }
-    setActiveItem(prev => prev === itemId ? null : itemId);
+    setInternalActiveItem(itemId);
     onItemSelect(itemId);
   };
 
