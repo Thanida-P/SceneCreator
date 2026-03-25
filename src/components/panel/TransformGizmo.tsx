@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
 interface TransformGizmoProps {
@@ -127,30 +126,6 @@ function AxisArrow({ axis, color, position, rotation, worldAxis, onAxisDrag, ren
 }
 
 export function TransformGizmo({ position, onMove, visible }: TransformGizmoProps) {
-  const groupRef = useRef<THREE.Group>(null);
-  const { camera } = useThree();
-
-  const cameraRightRef = useRef(new THREE.Vector3(1, 0, 0));
-  const cameraForwardRef = useRef(new THREE.Vector3(0, 0, 1));
-
-  useFrame(() => {
-    if (!groupRef.current || !visible || !camera) return;
-
-    const camForward = new THREE.Vector3();
-    camera.getWorldDirection(camForward);
-    camForward.y = 0;
-    camForward.normalize();
-
-    const camRight = new THREE.Vector3();
-    camRight.crossVectors(new THREE.Vector3(0, 1, 0), camForward).negate();
-
-    cameraRightRef.current.copy(camRight);
-    cameraForwardRef.current.copy(camForward);
-
-    const yaw = Math.atan2(camForward.x, camForward.z);
-    groupRef.current.rotation.set(0, yaw, 0);
-  });
-
   if (!visible) return null;
 
   const handleAxisDrag = (worldAxisVec: THREE.Vector3, delta: number) => {
@@ -164,11 +139,7 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
   };
 
   return (
-    <group
-      ref={groupRef}
-      position={position}
-      userData={{ isGizmo: true }}
-    >
+    <group position={position} userData={{ isGizmo: true }}>
 
       <mesh renderOrder={1} userData={{ isGizmo: true }}>
         <sphereGeometry args={[0.1, 16, 16]} />
@@ -186,7 +157,7 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
         color="#FF0000"
         position={[0.18, 0, 0]}
         rotation={[0, 0, -Math.PI / 2]}
-        worldAxis={cameraRightRef.current}
+        worldAxis={new THREE.Vector3(1, 0, 0)}
         onAxisDrag={handleAxisDrag}
         renderOrder={2}
       />
@@ -206,7 +177,7 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
         color="#0000FF"
         position={[0, 0, -0.18]}
         rotation={[-Math.PI / 2, 0, 0]}
-        worldAxis={cameraForwardRef.current}
+        worldAxis={new THREE.Vector3(0, 0, 1)}
         onAxisDrag={handleAxisDrag}
         renderOrder={3}
       />
