@@ -3957,7 +3957,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
         />
       </HeadLockedUI>
       <HeadLockedUI
-        distance={1.7}
+        distance={1.5}
         verticalOffset={0}
         enabled={state.showControlPanel}
       >
@@ -4201,7 +4201,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       )}
 
       <HeadLockedUI
-        distance={1.3}
+        distance={1.5}
         verticalOffset={0}
         enabled={state.showEnvironmentPanel}
       >

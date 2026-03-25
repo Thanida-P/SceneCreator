@@ -43,7 +43,7 @@ function EnvironmentButton({
   size?: number;
 }) {
   useCursor(isHovered, "pointer");
-  const [_textureLoaded, setTextureLoaded] = useState(false);
+  const [textureLoaded, setTextureLoaded] = useState(false);
 
   useEffect(() => {
     if (texture.threeTexture) {
@@ -198,31 +198,34 @@ export function EnvironmentSelectorPanel({
   return (
     <group>
   
-      <mesh position={[0, 0, 0]}>
-        <RoundedPlane width={PANEL_WIDTH} height={PANEL_HEIGHT} radius={0.1} />
-        <GradientBackground
-          width={PANEL_WIDTH}
-          height={PANEL_HEIGHT}
-          radius={0.1}
-          color1="#EAF4FA" 
-          color2="#F5F7FA"
-          opacity={0.05}
-        />
-      </mesh>
+      <mesh position={[0, -0.01, -0.02]}>
+          <RoundedPlane width={PANEL_WIDTH} height={PANEL_HEIGHT} radius={0.1} />
+          <meshStandardMaterial
+            color="#000000"
+            opacity={0.15}
+            transparent
+            depthWrite={false}
+            polygonOffset={true}
+            polygonOffsetFactor={2}
+            polygonOffsetUnits={2}
+          />
+        </mesh>
 
-  
-      <mesh position={[0, -0.01, -0.03]}>
-        <RoundedPlane width={PANEL_WIDTH} height={PANEL_HEIGHT} radius={0.1} />
-        <meshStandardMaterial
-          color="#000000"
-          opacity={0.2}
-          transparent
-          roughness={1.0}
-        />
-      </mesh>
+        <mesh position={[0, 0, -0.01]}>
+          <RoundedPlane width={PANEL_WIDTH} height={PANEL_HEIGHT} radius={0.1} />
+          <meshStandardMaterial
+            color="#94d5ef"
+            opacity={0.7}
+            transparent
+            depthWrite={false}
+            polygonOffset={true}
+            polygonOffsetFactor={1}
+            polygonOffsetUnits={1}
+          />
+        </mesh>
 
       <Text
-        position={[0, PANEL_HEIGHT / 2 - 0.03, 0.01]}
+        position={[0, PANEL_HEIGHT / 2 - 0.04, 0.01]}
         fontSize={0.045}
         color="#1F2937"
         anchorX="center"
@@ -234,14 +237,14 @@ export function EnvironmentSelectorPanel({
 
   
       <group
-        position={[PANEL_WIDTH / 2 - 0.04, PANEL_HEIGHT / 2 - 0.04, 0.01]}
+        position={[PANEL_WIDTH / 2 - 0.07, PANEL_HEIGHT / 2 - 0.07, 0.01]}
         onPointerDown={(e) => {
           e.stopPropagation();
           onClose();
         }}
       >
         <mesh>
-          <RoundedPlane width={0.03} height={0.03} radius={0.005} />
+          <RoundedPlane width={0.03} height={0.04} radius={0.005} />
           <meshStandardMaterial
             color="#EF4444"
             emissive="#000000"
@@ -251,7 +254,7 @@ export function EnvironmentSelectorPanel({
         </mesh>
         <Text
           position={[0, 0, 0.005]}
-          fontSize={0.02}
+          fontSize={0.03}
           color="#FFFFFF"
           anchorX="center"
           anchorY="middle"
@@ -272,7 +275,7 @@ export function EnvironmentSelectorPanel({
           <mesh position={[-0.1, 0, 0]}>
             <RoundedPlane width={0.15} height={0.04} radius={0.005} />
             <meshStandardMaterial
-              color={activeTab === "floor" ? "#10B981" : "#E5E7EB"}
+              color={activeTab === "floor" ? "#0ba370" : "#E5E7EB"}
               emissive={activeTab === "floor" ? "#10B981" : "#000000"}
               emissiveIntensity={activeTab === "floor" ? 0.3 : 0}
             />
@@ -280,7 +283,7 @@ export function EnvironmentSelectorPanel({
           <Text
             position={[-0.1, 0, 0.005]}
             fontSize={0.025}
-            color={activeTab === "floor" ? "#FFFFFF" : "#6B7280"}
+            color={activeTab === "floor" ? "#FFFFFF" : "#1c1f23"}
             anchorX="center"
             anchorY="middle"
             fontWeight={activeTab === "floor" ? "bold" : "normal"}
@@ -307,7 +310,7 @@ export function EnvironmentSelectorPanel({
           <Text
             position={[0.1, 0, 0.005]}
             fontSize={0.025}
-            color={activeTab === "wall" ? "#FFFFFF" : "#6B7280"}
+            color={activeTab === "wall" ? "#FFFFFF" : "#1c1f23"}
             anchorX="center"
             anchorY="middle"
             fontWeight={activeTab === "wall" ? "bold" : "normal"}
@@ -385,7 +388,7 @@ export function EnvironmentSelectorPanel({
 
       <Text
         position={[0, -PANEL_HEIGHT / 2 + 0.05, 0.01]}
-        fontSize={0.02}
+        fontSize={0.03}
         color="#6B7280"
         anchorX="center"
         anchorY="middle"
