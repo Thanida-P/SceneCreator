@@ -1354,17 +1354,13 @@ class SceneContentLogic {
           });
 
           if (floorCount === 0) {
-            console.warn("[FLOOR-TEXTURE] No floor meshes found!");
             this.showNotificationMessage(
               "No floor meshes found in model",
               "error",
             );
           } else {
             this.updateState({ selectedFloorId: textureId });
-            this.showNotificationMessage(
-              `Floor texture updated! (${floorCount} meshes)`,
-              "success",
-            );
+            
           }
         },
         undefined,
@@ -1437,10 +1433,6 @@ class SceneContentLogic {
             );
           } else {
             this.updateState({ selectedWallId: textureId });
-            this.showNotificationMessage(
-              `Wall texture updated! (${wallCount} meshes)`,
-              "success",
-            );
           }
         },
         undefined,
@@ -2087,6 +2079,26 @@ class SceneContentLogic {
 
   handleSidebarItemSelect(itemId: string): void {
     if (this.state.experienceMode) return;
+
+    if (this.state.sidebarActiveItem === itemId) {
+    this.updateState({
+      sidebarActiveItem: null,
+      showFurniture: false,
+      showControlPanel: false,
+      showTransformGizmo: false,
+      gizmoPosition: null,
+      showRotationGizmo: false,
+      rotationGizmoPosition: null,
+      showScalePanel: false,
+      showWallPanel: false,
+      showTexturePanel: false,
+      showEnvironmentPanel: false,
+      showSlider: false,
+      showInstructions: false,
+    });
+    return; 
+  }
+
     this.updateState({ sidebarActiveItem: itemId });
 
     switch (itemId) {
@@ -3957,7 +3969,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
         />
       </HeadLockedUI>
       <HeadLockedUI
-        distance={1.7}
+        distance={1.5}
         verticalOffset={0}
         enabled={state.showControlPanel}
       >
@@ -4151,27 +4163,6 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           <VRSidebar
             show={state.showSidebar && !state.experienceMode}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
-            activeItemId={state.sidebarActiveItem}
-            extraItems={
-              state.selectedItemId &&
-              logic.sceneManager?.isWallMounted(state.selectedItemId)
-                ? [
-                    {
-                      id: "wall",
-                      icon: "▤",
-                      label: "Wall",
-                      color: "#64748B",
-                      description: "Move in/out from wall",
-                    },
-                  ]
-                : undefined
-            }
-            hiddenItemIds={
-              state.selectedItemId &&
-              logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
-                ? ["movement", "rotation"]
-                : undefined
-            }
           />
         </group>
       </HeadLockedUI>
@@ -4180,7 +4171,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
         verticalOffset={0}
         enabled={state.showTexturePanel}
       >
-        <group position={[1, 0, 0]}>
+        <group position={[0.5, 0, -0.2]}>
           <TextureSelectorPanel
             show={state.showTexturePanel}
             onSelectTexture={(id, path) => logic.handleSelectTexture(id, path)}
@@ -4201,7 +4192,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       )}
 
       <HeadLockedUI
-        distance={1.3}
+        distance={1.5}
         verticalOffset={0}
         enabled={state.showEnvironmentPanel}
       >
