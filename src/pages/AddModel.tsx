@@ -102,7 +102,6 @@ export function AddModel() {
         <form onSubmit={handleHomeSubmit} style={formStyle}>
           <Input label="Home Name *" value={homeName} onChange={setHomeName} placeholder="e.g., My Villa" />
           <FileInput label="Model File (.glb, .gltf) *" accept=".glb,.gltf" onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHomeModelFile(e.target.files?.[0] || null)} />
-          <FileInput label="Texture Files (optional)" multiple onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHomeTextureFiles(e.target.files)} />
           <SubmitButtons loading={loading} back={() => navigate("/")} text="Add Home" />
         </form>
       );
@@ -117,7 +116,6 @@ export function AddModel() {
         <Checkbox label="Is Container?" checked={isContainer} onChange={setIsContainer} />
         <Checkbox label="Wall Mountable?" checked={wallMountable} onChange={setWallMountable} />
         <FileInput label="Model File (.glb, .gltf) *" accept=".glb,.gltf" onChange={(e: React.ChangeEvent<HTMLInputElement>) => setItemModelFile(e.target.files?.[0] || null)} />
-        <FileInput label="Texture Files (optional)" multiple onChange={(e: React.ChangeEvent<HTMLInputElement>) => setItemTextureFiles(e.target.files)} />
         <FileInput label="Preview Image (optional)" accept="image/*" onChange={(e: React.ChangeEvent<HTMLInputElement>) => setItemImage(e.target.files?.[0] || null)} />
         <SubmitButtons loading={loading} back={() => navigate("/")} text="Add Item" />
       </form>
