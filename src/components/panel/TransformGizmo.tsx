@@ -82,7 +82,6 @@ function AxisArrow({ axis, color, position, rotation, worldAxis, onAxisDrag, ren
 
   return (
     <group position={position} rotation={rotation}>
-      {/* Invisible hit area */}
       <mesh
         ref={meshRef}
         renderOrder={renderOrder}
@@ -97,7 +96,6 @@ function AxisArrow({ axis, color, position, rotation, worldAxis, onAxisDrag, ren
         <meshBasicMaterial visible={false} depthTest={false} depthWrite={false} />
       </mesh>
 
-      {/* Shaft */}
       <mesh position={[0, 0, 0]} renderOrder={renderOrder}>
         <cylinderGeometry args={[0.012, 0.012, 0.22, 12]} />
         <meshBasicMaterial
@@ -109,7 +107,6 @@ function AxisArrow({ axis, color, position, rotation, worldAxis, onAxisDrag, ren
         />
       </mesh>
 
-      {/* Arrowhead */}
       <mesh position={[0, 0.14, 0]} renderOrder={renderOrder}>
         <coneGeometry args={[0.05, 0.12, 12]} />
         <meshBasicMaterial
@@ -121,7 +118,6 @@ function AxisArrow({ axis, color, position, rotation, worldAxis, onAxisDrag, ren
         />
       </mesh>
 
-      {/* Tip dot */}
       <mesh position={[0, 0.22, 0]} renderOrder={renderOrder}>
         <sphereGeometry args={[0.025, 8, 8]} />
         <meshBasicMaterial color={arrowColor} depthTest={false} depthWrite={false} />
@@ -173,7 +169,7 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
       position={position}
       userData={{ isGizmo: true }}
     >
-      {/* Center sphere — lowest renderOrder so arrows always draw on top */}
+
       <mesh renderOrder={1} userData={{ isGizmo: true }}>
         <sphereGeometry args={[0.1, 16, 16]} />
         <meshBasicMaterial
@@ -185,7 +181,6 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
         />
       </mesh>
 
-      {/* Red arrow — camera RIGHT */}
       <AxisArrow
         axis="x"
         color="#FF0000"
@@ -196,7 +191,6 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
         renderOrder={2}
       />
 
-      {/* Green arrow — world UP */}
       <AxisArrow
         axis="y"
         color="#00FF00"
@@ -207,7 +201,6 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
         renderOrder={2}
       />
 
-      {/* Blue arrow — camera FORWARD — highest renderOrder to always appear in front */}
       <AxisArrow
         axis="z"
         color="#0000FF"
