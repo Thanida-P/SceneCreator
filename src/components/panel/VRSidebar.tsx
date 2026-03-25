@@ -71,7 +71,7 @@ const baseSidebarItems: SidebarItemData[] = [
   },
 ];
 
-const SIDEBAR_WIDTH = 0.25;
+const SIDEBAR_WIDTH = 0.22;
 const SIDEBAR_CENTER_X = SIDEBAR_WIDTH / 10;
 
 interface SidebarItemProps {
@@ -104,24 +104,24 @@ function SidebarItem({ item, yPos, isActive, onHover, onClick, isHovered }: Side
         }}
       >
         <mesh>
-          <RoundedPlane width={0.12} height={0.12} radius={0.02} />
+          <RoundedPlane width={0.1} height={0.1} radius={0.02} />
           <meshStandardMaterial
             color={
               isActive
                 ? item.color
                 : isHovered
                   ? "#334155"
-                  : "#1E293B"
+                  : "#3c5876"
             }
-            emissive={isHovered ? item.color : "#000000"}
+            emissive={isHovered ? item.color : "#ab9090"}
             emissiveIntensity={isHovered ? 0.3 : 0}
           />
         </mesh>
 
    
         <Text
-          position={[0.01, 0, 0.01]}
-          fontSize={0.06}
+          position={[0.005, 0, 0.01]}
+          fontSize={0.05}
           color={isActive || isHovered ? "#000000" : "#94A3B8"}
           anchorX="center"
           anchorY="middle"
@@ -132,7 +132,7 @@ function SidebarItem({ item, yPos, isActive, onHover, onClick, isHovered }: Side
   
         {isActive && (
           <mesh position={[0.07, 0, 0.01]}>
-            <planeGeometry args={[0.01, 0.12]} />
+            <planeGeometry args={[0.01, 0.1]} />
             <meshBasicMaterial color={item.color} />
           </mesh>
         )}
@@ -163,7 +163,6 @@ function SidebarItem({ item, yPos, isActive, onHover, onClick, isHovered }: Side
 interface VRSidebarProps {
   show: boolean;
   onItemSelect: (itemId: string) => void;
-  extraItems?: SidebarItemData[];
   activeItemId?: string | null;
   hiddenItemIds?: string[];
 }
@@ -171,42 +170,41 @@ interface VRSidebarProps {
 export function VRSidebar({
   show,
   onItemSelect,
-  extraItems = [],
-  activeItemId,
-  hiddenItemIds = [],
 }: VRSidebarProps) {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
-  const [internalActiveItem, setInternalActiveItem] = useState<string | null>(null);
+  const [activeItem, setActiveItem] = useState<string | null>(null);
 
   if (!show) return null;
 
-  const allItems = [...baseSidebarItems, ...extraItems];
-  const sidebarItems: SidebarItemData[] = hiddenItemIds.length > 0
-    ? allItems.filter((item) => !hiddenItemIds.includes(item.id))
-    : allItems;
-
-  const activeItem = activeItemId !== undefined ? activeItemId : internalActiveItem;
+  const sidebarItems: SidebarItemData[] = baseSidebarItems.map((item) => {
+ 
+  return item;
+  });
 
   const handleItemClick = (itemId: string) => {
-    setInternalActiveItem(itemId);
+    if (itemId === "toggleModel") {
+    onItemSelect(itemId);
+    return;
+  }
+    setActiveItem(itemId);
     onItemSelect(itemId);
   };
 
-  const sidebarHeight = 0.25 + sidebarItems.length * 0.25;
-  const topPadding = 0.1;
-  const itemSpacing = 0.25;
-  const firstItemY = sidebarHeight / 2 - topPadding - 0.06;
+  const sidebarHeight = 0.25 + sidebarItems.length * 0.12;
+  const topPadding = 0.06;
+  const itemSpacing = 0.14;
+  const firstItemY = sidebarHeight / 2 - topPadding - 0.07;
 
   return (
-    <group position={[0.01, 0, 0]}>
+    <group position={[0.2, 0, 0]}>
  
       <mesh position={[0.01, 0, -0.01]}>
         <GradientBackground
           width={SIDEBAR_WIDTH}
           height={sidebarHeight}
           radius={0.02}
-          color1="#1E293B"
-          color2="#0F172A"
+          color1="#dee9f4"
+          color2="#d7e3f2"
           opacity={0.85}
         />
       </mesh>
@@ -230,7 +228,7 @@ export function VRSidebar({
         return (
           <mesh key={`divider-${index}`} position={[SIDEBAR_CENTER_X, yPos, 0]}>
             <planeGeometry args={[0.1, 0.002]} />
-            <meshBasicMaterial color="#334155" opacity={0.5} transparent />
+            <meshBasicMaterial color="#3c5870" opacity={0} transparent />
           </mesh>
         );
       })}
