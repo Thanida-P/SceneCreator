@@ -898,7 +898,11 @@ export class SceneManager {
     if (Math.abs(deltaInOut) >= 0.001) {
       const currentDist = this.getDistanceFromWall(currentPosition, wallPlacement);
       const requestedDist = currentDist + deltaInOut;
+      const wallDistanceEpsilon = 0.0001;
       if (requestedDist > MAX_WALL_MOUNT_DISTANCE) {
+        const nearMax = currentDist >= MAX_WALL_MOUNT_DISTANCE - wallDistanceEpsilon;
+        const movingAway = deltaInOut > 0;
+        if (movingAway && nearMax) {
         return {
           success: false,
           needsConfirmation: false,
@@ -906,6 +910,7 @@ export class SceneManager {
           needsUnmountConfirm: true,
           reason: 'Beyond max distance from wall',
         };
+        }
       }
       const clampedDist = Math.max(0, Math.min(MAX_WALL_MOUNT_DISTANCE, requestedDist));
       const posWithInOut = this.clampPositionToWallDistance(newPosition, wallPlacement, clampedDist);

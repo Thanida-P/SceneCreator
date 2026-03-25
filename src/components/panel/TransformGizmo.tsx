@@ -5,6 +5,7 @@ interface TransformGizmoProps {
   position: [number, number, number];
   onMove: (axis: 'x' | 'y' | 'z', delta: number) => void;
   visible: boolean;
+  axisSigns?: Partial<Record<'x' | 'y' | 'z', number>>;
 }
 
 interface AxisArrowProps {
@@ -125,8 +126,12 @@ function AxisArrow({ axis, color, position, rotation, worldAxis, onAxisDrag, ren
   );
 }
 
-export function TransformGizmo({ position, onMove, visible }: TransformGizmoProps) {
+export function TransformGizmo({ position, onMove, visible, axisSigns }: TransformGizmoProps) {
   if (!visible) return null;
+
+  const xSign = axisSigns?.x ?? 1;
+  const ySign = axisSigns?.y ?? 1;
+  const zSign = axisSigns?.z ?? 1;
 
   const handleAxisDrag = (worldAxisVec: THREE.Vector3, delta: number) => {
     const x = worldAxisVec.x * delta;
@@ -155,9 +160,9 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
       <AxisArrow
         axis="x"
         color="#FF0000"
-        position={[0.18, 0, 0]}
-        rotation={[0, 0, -Math.PI / 2]}
-        worldAxis={new THREE.Vector3(1, 0, 0)}
+        position={[0.18 * xSign, 0, 0]}
+        rotation={[0, 0, -Math.PI / 2 * xSign]}
+        worldAxis={new THREE.Vector3(xSign, 0, 0)}
         onAxisDrag={handleAxisDrag}
         renderOrder={2}
       />
@@ -167,7 +172,7 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
         color="#00FF00"
         position={[0, 0.18, 0]}
         rotation={[0, 0, 0]}
-        worldAxis={new THREE.Vector3(0, 1, 0)}
+        worldAxis={new THREE.Vector3(0, ySign, 0)}
         onAxisDrag={handleAxisDrag}
         renderOrder={2}
       />
@@ -175,9 +180,9 @@ export function TransformGizmo({ position, onMove, visible }: TransformGizmoProp
       <AxisArrow
         axis="z"
         color="#0000FF"
-        position={[0, 0, -0.18]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        worldAxis={new THREE.Vector3(0, 0, 1)}
+        position={[0, 0, -0.18 * zSign]}
+        rotation={[-Math.PI / 2 * zSign, 0, 0]}
+        worldAxis={new THREE.Vector3(0, 0, zSign)}
         onAxisDrag={handleAxisDrag}
         renderOrder={3}
       />
