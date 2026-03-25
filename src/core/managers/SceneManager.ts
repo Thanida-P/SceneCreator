@@ -264,6 +264,9 @@ export class SceneManager {
     const worldBox = localBox.clone().applyMatrix4(worldMatrix);
 
     this.collisionDetector.setRoomBoundaryFromBox3(worldBox);
+
+    this.collisionDetector.clearStaticObjects();
+    this.registerHomeModelStaticFurniture();
   }
 
   getCollisionDetector(): CollisionDetector {

@@ -3299,8 +3299,9 @@ class SceneContentLogic {
     }
     this.lastFrameWhiteboardDrawing = whiteboardDrawingThisFrame;
 
-    const canNavigate = (this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world") ||
-                       (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free");
+    const canNavigate = !this.state.showAvatarMode &&
+      ((this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world") ||
+       (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free"));
     if (canNavigate && !whiteboardDrawingThisFrame) {
       this.navigationController?.update(session, camera, delta);
     }
@@ -4008,12 +4009,17 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
                   ]
                 : undefined
             }
-            hiddenItemIds={
-              state.selectedItemId &&
-              logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
-                ? ["movement", "rotation"]
-                : undefined
-            }
+            hiddenItemIds={(() => {
+              const hidden: string[] = [];
+              if (isPassthroughARMode) hidden.push("avatar");
+              if (
+                state.selectedItemId &&
+                logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
+              ) {
+                hidden.push("movement", "rotation");
+              }
+              return hidden.length > 0 ? hidden : undefined;
+            })()}
           />
         </group>
       </HeadLockedUI>
