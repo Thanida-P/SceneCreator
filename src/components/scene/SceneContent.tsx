@@ -3299,8 +3299,9 @@ class SceneContentLogic {
     }
     this.lastFrameWhiteboardDrawing = whiteboardDrawingThisFrame;
 
-    const canNavigate = (this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world") ||
-                       (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free");
+    const canNavigate = !this.state.showAvatarMode &&
+      ((this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world") ||
+       (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free"));
     if (canNavigate && !whiteboardDrawingThisFrame) {
       this.navigationController?.update(session, camera, delta);
     }
