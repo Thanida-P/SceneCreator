@@ -2848,32 +2848,109 @@ class SceneContentLogic {
 
   handleGizmoMove(axis: "x" | "y" | "z", delta: number): void {
     if (!this.state.selectedItemId || !this.sceneManager) return;
-    const furniture = this.sceneManager.getFurniture(this.state.selectedItemId);
+    const sceneManager = this.sceneManager;
+
+    const selectedId = this.state.selectedItemId;
+    const furniture = sceneManager.getFurniture(selectedId);
     if (!furniture || furniture.isWallpaper?.()) return;
     const currentPos = furniture.getPosition();
-    const newPos: [number, number, number] = [...currentPos];
+    const revertPos: [number, number, number] = [...currentPos];
+
+    const optimisticPos: [number, number, number] = [...currentPos];
     switch (axis) {
-      case 'x': newPos[0] += delta; break;
-      case 'y': newPos[1] += delta; break;
-      case 'z': newPos[2] += delta; break;
+      case "x":
+        optimisticPos[0] += delta;
+        break;
+      case "y":
+        optimisticPos[1] += delta;
+        break;
+      case "z":
+        optimisticPos[2] += delta;
+        break;
     }
-    this.updateState({ gizmoPosition: newPos });
-    this.sceneManager.moveFurniture(this.state.selectedItemId, newPos, false, false)
+    this.updateState({ gizmoPosition: optimisticPos });
+
+    // Wall-mounted Gizmo handling
+    if (furniture.isOnWall?.()) {
+      const wallPlacement = furniture.getWallPlacement?.();
+      if (wallPlacement) {
+        const [nx, , nz] = wallPlacement.wallNormal;
+
+        let deltaVertical = 0;
+        let deltaHorizontal = 0;
+        let deltaInOut = 0;
+
+        if (axis === "y") {
+          deltaVertical = delta;
+        } else if (axis === "x") {
+          if (Math.abs(nx) > Math.abs(nz)) {
+            deltaInOut = delta;
+          } else {
+            deltaHorizontal = delta;
+          }
+        } else if (axis === "z") {
+          if (Math.abs(nz) > Math.abs(nx)) {
+            deltaInOut = delta;
+          } else {
+            deltaHorizontal = delta;
+          }
+        }
+
+        sceneManager
+          .moveWallFurniture(selectedId, deltaVertical, deltaHorizontal, deltaInOut)
+          .then((result) => {
+            if (!result.success) {
+              if (result.needsConfirmation) {
+                this.pendingMove = optimisticPos;
+                this.updateState({ showMoveCloserPanel: true });
+              }
+              if (result.needsUnmountConfirm) {
+                this.updateState({ showUnmountPanel: true });
+              }
+              this.updateState({ gizmoPosition: revertPos });
+              return;
+            }
+
+            if (result.success) {
+              void sceneManager.refreshDeployedSpatialSnapshotFromLive(selectedId);
+              const updated = sceneManager.getFurniture(selectedId);
+              if (updated) {
+                this.updateState({ gizmoPosition: updated.getPosition() });
+              }
+            }
+          })
+          .catch((err) => {
+            console.error(`[handleGizmoMove] Wall move error:`, err);
+            this.updateState({ gizmoPosition: revertPos });
+          });
+
+        return;
+      }
+    }
+
+    sceneManager
+      .moveFurniture(selectedId, optimisticPos, false, false)
       .then((result) => {
         if (!result.success) {
           if (result.needsConfirmation) {
-            this.pendingMove = newPos;
+            this.pendingMove = optimisticPos;
             this.updateState({ showMoveCloserPanel: true });
-      } else if (result.needsUnmountConfirm) {
-        this.updateState({ showUnmountPanel: true });
           }
-          const revertPos = furniture.getPosition();
+          if (result.needsUnmountConfirm) {
+            this.updateState({ showUnmountPanel: true });
+          }
           this.updateState({ gizmoPosition: revertPos });
+          return;
+        }
+
+        const updated = sceneManager.getFurniture(selectedId);
+        if (updated) {
+          this.updateState({ gizmoPosition: updated.getPosition() });
         }
       })
       .catch((err) => {
         console.error(`[handleGizmoMove] Error:`, err);
-        this.updateState({ gizmoPosition: furniture.getPosition() });
+        this.updateState({ gizmoPosition: revertPos });
       });
   }
 
@@ -3589,6 +3666,19 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
                 position={state.gizmoPosition}
                 visible={state.showTransformGizmo}
                 onMove={(axis, delta) => logic.handleGizmoMove(axis, delta)}
+                axisSigns={(() => {
+                  const id = state.selectedItemId;
+                  const furniture = id && logic.sceneManager ? logic.sceneManager.getFurniture(id) : null;
+                  if (!furniture?.isOnWall?.() || furniture.isWallpaper?.()) return { x: 1, y: 1, z: 1 };
+                  const wp = furniture.getWallPlacement?.();
+                  const wallNormal = wp?.wallNormal;
+                  if (!wallNormal) return { x: 1, y: 1, z: 1 };
+                  const [nx, , nz] = wallNormal;
+                  if (Math.abs(nx) > Math.abs(nz)) {
+                    return { x: nx >= 0 ? 1 : -1, y: 1, z: 1 };
+                  }
+                  return { x: 1, y: 1, z: nz >= 0 ? -1 : 1 };
+                })()}
               />
             )}
 
