@@ -1354,17 +1354,13 @@ class SceneContentLogic {
           });
 
           if (floorCount === 0) {
-            console.warn("[FLOOR-TEXTURE] No floor meshes found!");
             this.showNotificationMessage(
               "No floor meshes found in model",
               "error",
             );
           } else {
             this.updateState({ selectedFloorId: textureId });
-            this.showNotificationMessage(
-              `Floor texture updated! (${floorCount} meshes)`,
-              "success",
-            );
+            
           }
         },
         undefined,
@@ -1437,10 +1433,6 @@ class SceneContentLogic {
             );
           } else {
             this.updateState({ selectedWallId: textureId });
-            this.showNotificationMessage(
-              `Wall texture updated! (${wallCount} meshes)`,
-              "success",
-            );
           }
         },
         undefined,
@@ -4180,7 +4172,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
         verticalOffset={0}
         enabled={state.showTexturePanel}
       >
-        <group position={[1, 0, 0]}>
+        <group position={[0.5, 0, -0.2]}>
           <TextureSelectorPanel
             show={state.showTexturePanel}
             onSelectTexture={(id, path) => logic.handleSelectTexture(id, path)}

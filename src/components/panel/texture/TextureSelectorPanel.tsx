@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Text } from "@react-three/drei";
-import { RoundedPlane, GradientBackground } from "../common/PanelElements";
+import { RoundedPlane, GradientBackground, ButtonBackground} from "../common/PanelElements";
 import * as THREE from "three";
 
 export interface TextureOption {
@@ -32,16 +32,16 @@ export function TextureSelectorPanel({
   if (!show) return null;
 
   const textureCount = textures.length;
-  const texturesPerRow = Math.min(4, textureCount);
+  const texturesPerRow = Math.min(1, textureCount);
   const rows = Math.ceil(textureCount / texturesPerRow);
 
-  const textureRadius = 0.12;
-  const spacing = 0.35;
+  const textureRadius = 0.08;
+  const spacing = 0.2;
   const gridWidth = (texturesPerRow - 1) * spacing + textureRadius * 2;
-  const gridHeight = rows * spacing + textureRadius * 2;
+  const gridHeight = rows * spacing + textureRadius ;
 
-  const panelWidth = Math.max(1.2, gridWidth + 0.2);
-  const panelHeight = gridHeight + 0.4;
+  const panelWidth = Math.max(0.5, gridWidth);
+  const panelHeight = gridHeight + 0.3;
 
   const startX = -(texturesPerRow - 1) * spacing / 2;
   const startY = (gridHeight / 2) - 0.15;
@@ -59,11 +59,11 @@ export function TextureSelectorPanel({
 
       <Text
         position={[0, panelHeight / 2 - 0.12, 0.01]}
-        fontSize={0.06}
+        fontSize={0.05}
         color="#334155"
         anchorX="center"
         anchorY="middle"
-        fontWeight="bold"
+        fontWeight="normal"
       >
         {title}
       </Text>
@@ -80,7 +80,7 @@ export function TextureSelectorPanel({
         const hasTexture = !!texture.threeTexture;
 
         return (
-          <group key={texture.id} position={[posX, posY, 0.01]}>
+          <group key={texture.id} position={[posX, -(posY+0.02), 0.01]}>
             <mesh
               onPointerEnter={(e) => {
                 e.stopPropagation();
@@ -106,14 +106,14 @@ export function TextureSelectorPanel({
             {isSelected && (
               <mesh position={[0, 0, 0.005]}>
                 <circleGeometry args={[textureRadius + 0.02, 32]} />
-                <meshBasicMaterial color="#3FA4CE" wireframe={true} />
+                <meshBasicMaterial color="#c1deea" wireframe={true} />
               </mesh>
             )}
 
             {isHovered && !isSelected && (
               <mesh position={[0, 0, 0.004]}>
                 <circleGeometry args={[textureRadius + 0.015, 32]} />
-                <meshBasicMaterial color="#66B9E2" wireframe={true} />
+                <meshBasicMaterial color="#c1deea" wireframe={true} />
               </mesh>
             )}
 
@@ -121,7 +121,7 @@ export function TextureSelectorPanel({
         );
       })}
 
-      <group position={[0, -panelHeight / 2 + 0.1, 0.01]}>
+      <group position={[0, -panelHeight / 2 + 0.12, 0.01]}>
         <mesh
           onPointerEnter={(e) => {
             e.stopPropagation();
@@ -138,8 +138,8 @@ export function TextureSelectorPanel({
         >
           <RoundedPlane width={0.3} height={0.08} radius={0.02} />
           <meshStandardMaterial
-            color={hoveredTextureId === "close" ? "#A5D1E7" : "#66B9E2"}
-            emissive={hoveredTextureId === "close" ? "#66B9E2" : "#66B9E2"}
+            color={hoveredTextureId === "close" ? "#4d99be" : "#579fc1"}
+            emissive={hoveredTextureId === "close" ? "#2b7dac" : "#66B9E2"}
             emissiveIntensity={hoveredTextureId === "close" ? 0.5 : 0.3}
           />
         </mesh>
