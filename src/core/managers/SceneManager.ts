@@ -64,10 +64,7 @@ export class SceneManager {
     
     await homeModel.loadModel(this.scene);
 
-    const boundary = homeModel.getBoundary();
-    if (boundary) {
-      this.collisionDetector.setRoomBoundary(boundary);
-    }
+    this.updateRoomBoundaryFromHomeModel();
 
     this.collisionDetector.clearStaticObjects();
     this.registerHomeModelStaticFurniture();
@@ -166,10 +163,15 @@ export class SceneManager {
     ) => {
       const worldNormal = toWorldNormal(lnx, lny, lnz);
       const worldCenter = toWorldCenter(lx, ly, lz);
+      const worldPlanePoint =
+        Math.abs(lnx) > Math.abs(lnz)
+          ? toWorldCenter(lnx > 0 ? localBox.min.x : localBox.max.x, cy, cz)
+          : toWorldCenter(cx, cy, lnz > 0 ? localBox.min.z : localBox.max.z);
+
       const worldWallPosition =
-        Math.abs(worldNormal[0]) > Math.abs(worldNormal[2])
-          ? worldCenter[0]
-          : worldCenter[2];
+        worldNormal[0] * worldPlanePoint[0] +
+        worldNormal[1] * worldPlanePoint[1] +
+        worldNormal[2] * worldPlanePoint[2];
 
       walls.push({
         id,
@@ -206,7 +208,7 @@ export class SceneManager {
       id: 'wall-x-max',
       label: 'Wall (East)',
       wallNormal: [-1, 0, 0],
-      wallPosition: max.x,
+      wallPosition: -max.x,
       width: max.z - min.z,
       height: max.y - min.y,
       center: [max.x - wallOffset, (min.y + max.y) / 2, (min.z + max.z) / 2],
@@ -233,7 +235,7 @@ export class SceneManager {
       id: 'wall-z-max',
       label: 'Wall (South)',
       wallNormal: [0, 0, -1],
-      wallPosition: max.z,
+      wallPosition: -max.z,
       width: max.x - min.x,
       height: max.y - min.y,
       center: [(min.x + max.x) / 2, (min.y + max.y) / 2, max.z - wallOffset],
@@ -252,16 +254,16 @@ export class SceneManager {
       new THREE.Vector3(boundary.min_x, boundary.min_y, boundary.min_z),
       new THREE.Vector3(boundary.max_x, boundary.max_y, boundary.max_z)
     );
-    const worldBox = localBox.clone().applyMatrix4(homeModel.getGroup().matrixWorld);
+    const homeGroup = homeModel.getGroup();
+    homeGroup.updateMatrixWorld(true);
+    const worldMatrix = homeGroup.matrixWorld;
 
-    this.collisionDetector.setRoomBoundary({
-      min_x: worldBox.min.x,
-      max_x: worldBox.max.x,
-      min_y: worldBox.min.y,
-      max_y: worldBox.max.y,
-      min_z: worldBox.min.z,
-      max_z: worldBox.max.z,
-    });
+    const worldToLocal = worldMatrix.clone().invert();
+    this.collisionDetector.setRoomBoundaryLocalFromBox3(localBox, worldToLocal);
+
+    const worldBox = localBox.clone().applyMatrix4(worldMatrix);
+
+    this.collisionDetector.setRoomBoundaryFromBox3(worldBox);
   }
 
   getCollisionDetector(): CollisionDetector {
@@ -279,6 +281,8 @@ export class SceneManager {
     const homeGroup = this.homeModel.getGroup();
     homeGroup.updateMatrixWorld(true);
     const matrix = homeGroup.matrixWorld;
+    const worldToLocal = matrix.clone().invert();
+    this.collisionDetector.setRoomBoundaryLocalFromBox3(localBox, worldToLocal);
     const corners = [
       localBox.min.clone(),
       localBox.max.clone(),
@@ -544,120 +548,106 @@ export class SceneManager {
     
     // Check if object is touching any wall surface
     if (!isWallMounted && isWallMountable && box && roomBoundary) {
-      const margin = 0.1;
-      const touchingXMin = Math.abs(box.min.x - roomBoundary.min.x) < margin;
-      const touchingXMax = Math.abs(box.max.x - roomBoundary.max.x) < margin;
-      const touchingZMin = Math.abs(box.min.z - roomBoundary.min.z) < margin;
-      const touchingZMax = Math.abs(box.max.z - roomBoundary.max.z) < margin;
-      
-      // Check if the object is very close to or intersecting with wall boundaries
-      const nearXMin = box.min.x <= roomBoundary.min.x + margin && box.min.x >= roomBoundary.min.x - margin;
-      const nearXMax = box.max.x >= roomBoundary.max.x - margin && box.max.x <= roomBoundary.max.x + margin;
-      const nearZMin = box.min.z <= roomBoundary.min.z + margin && box.min.z >= roomBoundary.min.z - margin;
-      const nearZMax = box.max.z >= roomBoundary.max.z - margin && box.max.z <= roomBoundary.max.z + margin;
-      
-      if (touchingXMin || touchingXMax || touchingZMin || touchingZMax || 
-          nearXMin || nearXMax || nearZMin || nearZMax) {
-        let wallNormal: [number, number, number];
-        let wallPosition: number;
-        
-        if (touchingXMin || nearXMin) {
-          wallNormal = [1, 0, 0];
-          wallPosition = roomBoundary.min.x;
-        } else if (touchingXMax || nearXMax) {
-          wallNormal = [-1, 0, 0];
-          wallPosition = roomBoundary.max.x;
-        } else if (touchingZMin || nearZMin) {
-          wallNormal = [0, 0, 1];
-          wallPosition = roomBoundary.min.z;
-        } else {
-          wallNormal = [0, 0, -1];
-          wallPosition = roomBoundary.max.z;
-        }
-        
-        // Mount the item to the wall
-        furniture.setWallPlacement({
-          wallNormal,
-          wallPosition,
-        });
+      const walls = this.getAvailableWalls();
+      if (walls.length > 0) {
+        const boxCorners = [
+          new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+          new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+          new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+          new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+          new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+          new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+          new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+          new THREE.Vector3(box.max.x, box.max.y, box.max.z),
+        ];
 
-        furniture.setPosition(newPosition);
-        this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
-        
-        const adjustedPos = this.adjustPositionToWall(id, newPosition, wallNormal, wallPosition);
-        
-        furniture.setPosition(adjustedPos);
-        this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
-        
-        const adjustedBox = this.collisionDetector.furnitureBoxes.get(id);
-        if (adjustedBox && roomBoundary) {
-          const margin = 0.05;
-          const wallOffset = 0.02;
-          const boxSize = new THREE.Vector3();
-          adjustedBox.getSize(boxSize);
-          
-          let needsAdjustment = false;
-          const finalPos: [number, number, number] = [...adjustedPos];
-          
-          if (Math.abs(wallNormal[0]) > Math.abs(wallNormal[2])) {
-            // X wall
-            if (wallNormal[0] > 0) {
-              const targetMinX = wallPosition + wallOffset;
-              if (adjustedBox.min.x < targetMinX) {
-                finalPos[0] = targetMinX;
-                needsAdjustment = true;
-              }
-            } else {
-              const targetMaxX = wallPosition - wallOffset;
-              if (adjustedBox.max.x > targetMaxX) {
-                finalPos[0] = targetMaxX;
-                needsAdjustment = true;
-              }
-            }
-            if (adjustedBox.max.x > roomBoundary.max.x - margin) {
-              finalPos[0] = roomBoundary.max.x - margin - boxSize.x / 2;
-              needsAdjustment = true;
-            }
-          } else {
-            // Z wall
-            if (wallNormal[2] > 0) {
-              const targetMinZ = wallPosition + wallOffset;
-              if (adjustedBox.min.z < targetMinZ) {
-                finalPos[2] = targetMinZ;
-                needsAdjustment = true;
-              }
-            } else {
-              const targetMaxZ = wallPosition - wallOffset;
-              if (adjustedBox.max.z > targetMaxZ) {
-                finalPos[2] = targetMaxZ;
-                needsAdjustment = true;
-              }
-            }
-            if (adjustedBox.max.z > roomBoundary.max.z - margin) {
-              finalPos[2] = roomBoundary.max.z - margin - boxSize.z / 2;
-              needsAdjustment = true;
-            }
+        const computeBoxDistanceToWallPlane = (w: WallInfo): number => {
+          const n = new THREE.Vector3(...w.wallNormal);
+          if (n.lengthSq() > 0) n.normalize();
+
+          let minS = Infinity;
+          let maxS = -Infinity;
+          for (const c of boxCorners) {
+            const s = c.dot(n) - w.wallPosition;
+            minS = Math.min(minS, s);
+            maxS = Math.max(maxS, s);
           }
-          
-          // Constrain Y (vertical) boundaries
-          if (adjustedBox.min.y < roomBoundary.min.y + margin) {
-            finalPos[1] = roomBoundary.min.y + margin + boxSize.y / 2;
-            needsAdjustment = true;
-          } else if (adjustedBox.max.y > roomBoundary.max.y - margin) {
-            finalPos[1] = roomBoundary.max.y - margin - boxSize.y / 2;
-            needsAdjustment = true;
+
+          if (minS <= 0 && maxS >= 0) return 0;
+          return Math.min(Math.abs(minS), Math.abs(maxS));
+        };
+
+        let bestWall: WallInfo | null = null;
+        let bestDist = Infinity;
+        for (const w of walls) {
+          const dist = computeBoxDistanceToWallPlane(w);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestWall = w;
           }
-          
-          if (needsAdjustment) {
+        }
+
+        const mountTolerance = 0.2;
+        if (bestWall && bestDist <= mountTolerance) {
+          furniture.setWallPlacement({
+            wallNormal: bestWall.wallNormal,
+            wallPosition: bestWall.wallPosition,
+          });
+
+          furniture.setPosition(newPosition);
+          this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+
+          const adjustedPos = this.adjustPositionToWall(id, newPosition, bestWall.wallNormal, bestWall.wallPosition);
+
+          furniture.setPosition(adjustedPos);
+          this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+
+          const adjustedBox = this.collisionDetector.furnitureBoxes.get(id);
+          if (adjustedBox && roomBoundary) {
+            const margin = 0.05;
+            const boxSize = new THREE.Vector3();
+            adjustedBox.getSize(boxSize);
+
+            const constrainedVec = this.collisionDetector.constrainToRoom(
+              new THREE.Vector3(adjustedPos[0], adjustedPos[1], adjustedPos[2]),
+              adjustedBox
+            );
+
+            const finalPos: [number, number, number] = [
+              constrainedVec.x,
+              constrainedVec.y,
+              constrainedVec.z,
+            ];
+
+            if (adjustedBox.min.y < roomBoundary.min.y + margin) {
+              finalPos[1] = roomBoundary.min.y + margin + boxSize.y / 2;
+            } else if (adjustedBox.max.y > roomBoundary.max.y - margin) {
+              finalPos[1] = roomBoundary.max.y - margin - boxSize.y / 2;
+            }
+
             furniture.setPosition(finalPos);
             this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
           }
+
+          const mountedRoomCollision = this.collisionDetector.checkRoomCollision(id);
+          if (mountedRoomCollision.hasCollision) {
+            furniture.setPlacementMode('floor');
+            furniture.setPosition(originalPosition);
+            this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+            furniture.setCollision(true);
+            return {
+              success: false,
+              needsConfirmation: false,
+              needsPreciseCheck: false,
+              reason: 'Outside room boundary',
+            };
+          }
+
+          const finalPosition = furniture.getPosition();
+          this.lastValidPositions.set(id, finalPosition);
+          furniture.setCollision(false);
+          return { success: true, needsConfirmation: false, needsPreciseCheck: false };
         }
-        
-        const finalPosition = furniture.getPosition();
-        this.lastValidPositions.set(id, finalPosition);
-        furniture.setCollision(false);
-        return { success: true, needsConfirmation: false, needsPreciseCheck: false };
       }
     }
     
@@ -828,23 +818,12 @@ export class SceneManager {
     const newPos: [number, number, number] = [...currentPos];
     
     if (wallPlacement) {
-      const wallNormal = wallPlacement.wallNormal;
-      
-      if (Math.abs(wallNormal[0]) > Math.abs(wallNormal[2])) {
-        // X wall
-        if (wallNormal[0] > 0) {
-          newPos[0] = currentPos[0] + offsetDistance;
-        } else {
-          newPos[0] = currentPos[0] - offsetDistance;
-        }
-      } else {
-        // Z wall
-        if (wallNormal[2] > 0) {
-          newPos[2] = currentPos[2] + offsetDistance;
-        } else {
-          newPos[2] = currentPos[2] - offsetDistance;
-        }
-      }
+      const n = new THREE.Vector3(...wallPlacement.wallNormal);
+      n.normalize();
+      const p = new THREE.Vector3(...currentPos).addScaledVector(n, offsetDistance);
+      newPos[0] = p.x;
+      newPos[1] = p.y;
+      newPos[2] = p.z;
     }
     
     // Unmount from wall
@@ -949,53 +928,28 @@ export class SceneManager {
           } else if (box.max.y > roomBoundary.max.y - margin) {
             constrainedY = roomBoundary.max.y - margin - boxSize.y / 2;
           }
-          
-          const inOutDistance = Math.abs(deltaInOut);
-          const isMovingAwayFromWall = inOutDistance > 0.01;
-          
+
           let constrainedX = newPosition[0];
           let constrainedZ = newPosition[2];
           let needsConstraint = false;
           
           if (Math.abs(wallNormal[2]) > Math.abs(wallNormal[0])) {
             if (box.min.x < roomBoundary.min.x + margin || box.max.x > roomBoundary.max.x - margin) {
-              if (!isMovingAwayFromWall) {
-                furniture.setPosition(currentPosition);
-                this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
-                return {
-                  success: false,
-                  needsConfirmation: false,
-                  needsPreciseCheck: false,
-                  reason: 'Cannot move further - wall boundary reached'
-                };
-              } else {
-                if (box.min.x < roomBoundary.min.x + margin) {
-                  constrainedX = roomBoundary.min.x + margin + boxSize.x / 2;
-                } else if (box.max.x > roomBoundary.max.x - margin) {
-                  constrainedX = roomBoundary.max.x - margin - boxSize.x / 2;
-                }
-                needsConstraint = true;
+              if (box.min.x < roomBoundary.min.x + margin) {
+                constrainedX = roomBoundary.min.x + margin + boxSize.x / 2;
+              } else if (box.max.x > roomBoundary.max.x - margin) {
+                constrainedX = roomBoundary.max.x - margin - boxSize.x / 2;
               }
+              needsConstraint = true;
             }
           } else {
             if (box.min.z < roomBoundary.min.z + margin || box.max.z > roomBoundary.max.z - margin) {
-              if (!isMovingAwayFromWall) {
-                furniture.setPosition(currentPosition);
-                this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
-                return {
-                  success: false,
-                  needsConfirmation: false,
-                  needsPreciseCheck: false,
-                  reason: 'Cannot move further - wall boundary reached'
-                };
-              } else {
-                if (box.min.z < roomBoundary.min.z + margin) {
-                  constrainedZ = roomBoundary.min.z + margin + boxSize.z / 2;
-                } else if (box.max.z > roomBoundary.max.z - margin) {
-                  constrainedZ = roomBoundary.max.z - margin - boxSize.z / 2;
-                }
-                needsConstraint = true;
+              if (box.min.z < roomBoundary.min.z + margin) {
+                constrainedZ = roomBoundary.min.z + margin + boxSize.z / 2;
+              } else if (box.max.z > roomBoundary.max.z - margin) {
+                constrainedZ = roomBoundary.max.z - margin - boxSize.z / 2;
               }
+              needsConstraint = true;
             }
           }
           
@@ -1013,6 +967,44 @@ export class SceneManager {
     
     furniture.setPosition(newPosition);
     this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+
+    const boxAfterMove = this.collisionDetector.furnitureBoxes.get(id);
+    const roomCollisionAfterMove = this.collisionDetector.checkRoomCollision(id);
+    if (roomCollisionAfterMove.hasCollision && boxAfterMove) {
+      const constrainedVec = this.collisionDetector.constrainToRoom(
+        new THREE.Vector3(newPosition[0], newPosition[1], newPosition[2]),
+        boxAfterMove
+      );
+      const constrainedPos: [number, number, number] = [
+        constrainedVec.x,
+        constrainedVec.y,
+        constrainedVec.z,
+      ];
+
+      furniture.setPosition(constrainedPos);
+      this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+
+      const roomCollisionAfterClamp = this.collisionDetector.checkRoomCollision(id);
+      if (roomCollisionAfterClamp.hasCollision) {
+        furniture.setPosition(currentPosition);
+        this.collisionDetector.updateFurnitureBox(
+          id,
+          furniture.getGroup(),
+          furniture.getModelId()
+        );
+        furniture.setCollision(true);
+        return {
+          success: false,
+          needsConfirmation: false,
+          needsPreciseCheck: false,
+          reason: 'Cannot move further - wall boundary reached',
+        };
+      }
+
+      newPosition[0] = constrainedPos[0];
+      newPosition[1] = constrainedPos[1];
+      newPosition[2] = constrainedPos[2];
+    }
 
     if (this.config.enableCollisionDetection) {
       const hasAABBCollision = this.collisionDetector.checkAABBCollisionOnly(id);
@@ -1079,12 +1071,10 @@ export class SceneManager {
     position: [number, number, number],
     wall: WallPlacementInfo
   ): number {
-    const [nx, , nz] = wall.wallNormal;
-    const wp = wall.wallPosition;
-    if (Math.abs(nx) > Math.abs(nz)) {
-      return nx > 0 ? position[0] - wp : wp - position[0];
-    }
-    return nz > 0 ? position[2] - wp : wp - position[2];
+    const n = new THREE.Vector3(...wall.wallNormal);
+    n.normalize();
+    const p = new THREE.Vector3(...position);
+    return Math.max(0, p.dot(n) - wall.wallPosition);
   }
 
   private clampPositionToWallDistance(
@@ -1092,15 +1082,15 @@ export class SceneManager {
     wall: WallPlacementInfo,
     distanceFromWall: number
   ): [number, number, number] {
-    const result: [number, number, number] = [...position];
-    const [nx, , nz] = wall.wallNormal;
-    const wp = wall.wallPosition;
-    if (Math.abs(nx) > Math.abs(nz)) {
-      result[0] = nx > 0 ? wp + distanceFromWall : wp - distanceFromWall;
-    } else {
-      result[2] = nz > 0 ? wp + distanceFromWall : wp - distanceFromWall;
-    }
-    return result;
+    const n = new THREE.Vector3(...wall.wallNormal);
+    n.normalize();
+    const p = new THREE.Vector3(...position);
+
+    const currentDist = p.dot(n) - wall.wallPosition;
+    const delta = distanceFromWall - currentDist;
+    p.addScaledVector(n, delta);
+
+    return [p.x, p.y, p.z];
   }
 
   getWallDistanceFromWall(id: string): number | null {
@@ -1120,38 +1110,13 @@ export class SceneManager {
     wallNormal: [number, number, number],
     wallPosition: number
   ): [number, number, number] {
-    const adjusted: [number, number, number] = [...position];
+    void id;
     const wallOffset = 0.02;
-
-    const box = this.collisionDetector.furnitureBoxes.get(id);
-    if (!box) {
-      if (Math.abs(wallNormal[0]) > Math.abs(wallNormal[2])) {
-        // X wall
-        adjusted[0] = wallPosition + (wallNormal[0] > 0 ? wallOffset : -wallOffset);
-      } else {
-        // Z wall
-        adjusted[2] = wallPosition + (wallNormal[2] > 0 ? wallOffset : -wallOffset);
-      }
-      return adjusted;
-    }
-
-    if (Math.abs(wallNormal[0]) > Math.abs(wallNormal[2])) {
-      // X wall
-      if (wallNormal[0] > 0) {
-        adjusted[0] = wallPosition + wallOffset;
-      } else {
-        adjusted[0] = wallPosition - wallOffset;
-      }
-    } else {
-      // Z wall
-      if (wallNormal[2] > 0) {
-        adjusted[2] = wallPosition + wallOffset;
-      } else {
-        adjusted[2] = wallPosition - wallOffset;
-      }
-    }
-
-    return adjusted;
+    return this.clampPositionToWallDistance(
+      position,
+      { wallNormal, wallPosition },
+      wallOffset
+    );
   }
 
   interpretSpatialDataForLoad(sd: Record<string, unknown> | undefined | null): {
@@ -1208,6 +1173,31 @@ export class SceneManager {
       wallPlacement = sd.wall_placement as WallPlacementInfo;
     }
 
+    if (wallPlacement) {
+      const roomBoundary = this.collisionDetector.getRoomBoundary();
+      if (roomBoundary) {
+        const n = new THREE.Vector3(...wallPlacement.wallNormal);
+        if (n.lengthSq() > 1e-9) n.normalize();
+        const nx = n.x;
+        const nz = n.z;
+
+        const isAxisX = Math.abs(nx) >= 0.99 && Math.abs(nz) < 0.01;
+        const isAxisZ = Math.abs(nz) >= 0.99 && Math.abs(nx) < 0.01;
+
+        if (isAxisX) {
+          wallPlacement = {
+            wallNormal: nx > 0 ? [1, 0, 0] : [-1, 0, 0],
+            wallPosition: nx > 0 ? roomBoundary.min.x : -roomBoundary.max.x,
+          };
+        } else if (isAxisZ) {
+          wallPlacement = {
+            wallNormal: nz > 0 ? [0, 0, 1] : [0, 0, -1],
+            wallPosition: nz > 0 ? roomBoundary.min.z : -roomBoundary.max.z,
+          };
+        }
+      }
+    }
+
     return { position, rotation, wallPlacement };
   }
 
@@ -1236,6 +1226,35 @@ export class SceneManager {
         if (interp.wallPlacement) {
           furniture.setWallPlacement(interp.wallPlacement);
         }
+
+        if (furniture.isOnWall?.()) {
+          const currentPos = furniture.getPosition();
+          const availableWalls = this.getAvailableWalls();
+
+          let bestWall: (typeof availableWalls)[number] | null = null;
+          let bestAbsDist = Infinity;
+
+          for (const w of availableWalls) {
+            const dist = this.getDistanceFromWall(currentPos, {
+              wallNormal: w.wallNormal,
+              wallPosition: w.wallPosition,
+            });
+            const absDist = Math.abs(dist);
+            if (absDist < bestAbsDist) {
+              bestAbsDist = absDist;
+              bestWall = w;
+            }
+          }
+
+          const tolerance = 0.5;
+          if (bestWall && bestAbsDist <= MAX_WALL_MOUNT_DISTANCE + tolerance) {
+            furniture.setWallPlacement({
+              wallNormal: bestWall.wallNormal,
+              wallPosition: bestWall.wallPosition,
+            });
+          }
+        }
+
         if (furniture.isWallpaper?.()) {
           (furniture as WallpaperItem).reorientPlaneToWall();
         }
@@ -1255,34 +1274,31 @@ export class SceneManager {
       furniture.setRotation([euler.x, euler.y, euler.z]);
 
       if (furniture.isOnWall?.()) {
-        const prevWp = furniture.getWallPlacement?.();
-        if (prevWp) {
-          const currentPos = furniture.getPosition();
-          const availableWalls = this.getAvailableWalls();
+        const currentPos = furniture.getPosition();
+        const availableWalls = this.getAvailableWalls();
 
-          let bestWall: (typeof availableWalls)[number] | null = null;
-          let bestAbsDist = Infinity;
+        let bestWall: (typeof availableWalls)[number] | null = null;
+        let bestAbsDist = Infinity;
 
-          for (const w of availableWalls) {
-            const dist = this.getDistanceFromWall(currentPos, {
-              wallNormal: w.wallNormal,
-              wallPosition: w.wallPosition,
-            });
-            const absDist = Math.abs(dist);
+        for (const w of availableWalls) {
+          const dist = this.getDistanceFromWall(currentPos, {
+            wallNormal: w.wallNormal,
+            wallPosition: w.wallPosition,
+          });
+          const absDist = Math.abs(dist);
 
-            if (absDist < bestAbsDist) {
-              bestAbsDist = absDist;
-              bestWall = w;
-            }
+          if (absDist < bestAbsDist) {
+            bestAbsDist = absDist;
+            bestWall = w;
           }
+        }
 
-          const tolerance = 0.5;
-          if (bestWall && bestAbsDist <= MAX_WALL_MOUNT_DISTANCE + tolerance) {
-            furniture.setWallPlacement({
-              wallNormal: bestWall.wallNormal,
-              wallPosition: bestWall.wallPosition,
-            });
-          }
+        const tolerance = 0.5;
+        if (bestWall && bestAbsDist <= MAX_WALL_MOUNT_DISTANCE + tolerance) {
+          furniture.setWallPlacement({
+            wallNormal: bestWall.wallNormal,
+            wallPosition: bestWall.wallPosition,
+          });
         }
       }
 
