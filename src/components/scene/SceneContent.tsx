@@ -4009,12 +4009,17 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
                   ]
                 : undefined
             }
-            hiddenItemIds={
-              state.selectedItemId &&
-              logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
-                ? ["movement", "rotation"]
-                : undefined
-            }
+            hiddenItemIds={(() => {
+              const hidden: string[] = [];
+              if (isPassthroughARMode) hidden.push("avatar");
+              if (
+                state.selectedItemId &&
+                logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
+              ) {
+                hidden.push("movement", "rotation");
+              }
+              return hidden.length > 0 ? hidden : undefined;
+            })()}
           />
         </group>
       </HeadLockedUI>
