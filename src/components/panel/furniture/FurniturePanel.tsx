@@ -124,16 +124,14 @@ export function VRFurniturePanel({
 
   const itemsPerRow = 3;
   const itemsPerPage = 6; 
-
   const headerHeight = 0.25;
   const categoryBarHeight = 0.35;
-  const itemHeight = 0.5;
+  const itemHeight = 0.45;
   const paginationHeight = 0.15;
   const topPadding = 0;
   const bottomPadding = 0.01;
 
-
-  const panelHeight = 1.6;
+  const panelHeight = 1.4;
   const panelWidth = 1;
 
 
@@ -173,7 +171,7 @@ export function VRFurniturePanel({
       </Text>
 
       <group
-        position={[0.4, panelHeight / 2 - 0.08, 0.01]}
+        position={[0.4, panelHeight / 2 - 0.1, 0.01]}
         onPointerEnter={(e) => {
           e.stopPropagation();
           setHoveredButton("close");
@@ -287,7 +285,7 @@ export function VRFurniturePanel({
               const cardSpacing = 0.05;
               const totalWidth = itemsPerRow * cardWidth + (itemsPerRow - 1) * cardSpacing;
               const x = -totalWidth / 2 + col * (cardWidth + cardSpacing) + cardWidth / 2;
-              const contentStartY = panelHeight / 1.6 - headerHeight - categoryBarHeight - topPadding - cardHeight / 2;
+              const contentStartY = panelHeight / 1.5 - headerHeight - categoryBarHeight - topPadding - cardHeight / 2;
               const y = contentStartY - (row * itemHeight);
 
               const isHovered = hoveredItem === f.id;
@@ -414,7 +412,7 @@ export function VRFurniturePanel({
                       <Text
                         position={[0, 0, 0.001]}
                         fontSize={0.02}
-                        color="#ffffff"
+                        color="#151010"
                         anchorX="center"
                         anchorY="middle"
                         fontWeight="600"
@@ -432,7 +430,7 @@ export function VRFurniturePanel({
                     anchorY="middle"
                     maxWidth={cardWidth - 0.08}
                     textAlign="center"
-                    fontWeight="500"
+                    fontWeight="800"
                   >
                     {f.name}
                   </Text>
@@ -451,7 +449,7 @@ export function VRFurniturePanel({
           onPageChange={setCurrentPage}
           hoveredButton={hoveredButton}
           setHoveredButton={setHoveredButton}
-          yPosition={-panelHeight / 2 + paginationHeight / 2 + bottomPadding}
+          yPosition={-panelHeight / 2.1 + paginationHeight / 2 + bottomPadding}
         />
       )}
     </group>
@@ -604,7 +602,7 @@ function CategoryButtons({
           <mesh>
             <RoundedPlane width={arrowButtonWidth} height={buttonHeight} radius={0.02} />
             <meshStandardMaterial
-              color={hoveredButton === 'scroll-left' ? "#A5D1E7" : "#DCEEFB"}
+              color={hoveredButton === 'scroll-left' ? "#A5D1E7" : "#d5dbdf"}
               emissive="#ffffff"
               emissiveIntensity={hoveredButton === 'scroll-left' ? 0.2 : 0.1}
               roughness={0.5}
