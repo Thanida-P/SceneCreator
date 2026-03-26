@@ -1059,11 +1059,18 @@ export class SceneManager {
 
     const spawnPos = cameraWorldPos.clone();
     spawnPos.addScaledVector(cameraDirection, distance);
-    spawnPos.y = this.config.floorLevel;
 
-    if (this.homeModel) {
-      const constrained = this.homeModel.constrainPosition(spawnPos);
-      return [constrained.x, constrained.y, constrained.z];
+    const worldRoomBox = this.collisionDetector.getRoomBoundary();
+    if (worldRoomBox) {
+      spawnPos.y = worldRoomBox.min.y;
+      spawnPos.x = Math.max(worldRoomBox.min.x, Math.min(worldRoomBox.max.x, spawnPos.x));
+      spawnPos.z = Math.max(worldRoomBox.min.z, Math.min(worldRoomBox.max.z, spawnPos.z));
+    } else {
+      spawnPos.y = this.config.floorLevel;
+      if (this.homeModel) {
+        const constrained = this.homeModel.constrainPosition(spawnPos);
+        return [constrained.x, constrained.y, constrained.z];
+      }
     }
 
     return [spawnPos.x, spawnPos.y, spawnPos.z];
