@@ -3911,7 +3911,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           <ScaleControlPanel
             show={state.showScalePanel}
             currentScale={state.sliderValue}
-            position={[0.5, 0, 0]}
+            position={[0.4, 0, 0]}
             onScaleChange={(newScale) => logic.handleScaleChange(newScale)}
             onClose={() => logic.updateState({ showScalePanel: false })}
           />

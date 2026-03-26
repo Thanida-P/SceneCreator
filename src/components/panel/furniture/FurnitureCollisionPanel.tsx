@@ -23,11 +23,11 @@ export function VRPreciseCollisionPanel({
 
   if (!show) return null;
 
-  const panelWidth = 0.9;
+  const panelWidth = 0.8;
   const panelHeight = 0.6;
 
   return (
-    <group>
+    <group position={[-0.08, 0, 0]}>
       {/* Main background panel */}
       <mesh position={[0, 0, -0.02]}>
         <GradientBackground
@@ -93,7 +93,7 @@ export function VRPreciseCollisionPanel({
 
       {/* Yes Button */}
       <group
-        position={[-0.22, -0.2, 0.01]}
+        position={[-0.15, -0.2, 0.01]}
         onPointerEnter={(e) => {
           e.stopPropagation();
           if (!isChecking) setHoveredButton("yes");
@@ -108,7 +108,7 @@ export function VRPreciseCollisionPanel({
         }}
       >
         <mesh>
-          <RoundedPlane width={0.35} height={0.1} radius={0.03} />
+          <RoundedPlane width={0.3} height={0.1} radius={0.03} />
           <meshStandardMaterial
             color={isChecking ? "#9CA3AF" : hoveredButton === "yes" ? "#10B981" : "#059669"}
             emissive={isChecking ? "#6B7280" : "#059669"}
@@ -128,9 +128,9 @@ export function VRPreciseCollisionPanel({
       </group>
 
       {/* Yes Button Shadow */}
-      <group position={[-0.22, -0.21, 0]}>
+      <group position={[-0.15, -0.21, 0]}>
         <mesh>
-          <RoundedPlane width={0.35} height={0.1} radius={0.03} />
+          <RoundedPlane width={0.3} height={0.1} radius={0.03} />
           <meshStandardMaterial
             color="#000000"
             opacity={0.15}
@@ -142,7 +142,7 @@ export function VRPreciseCollisionPanel({
 
       {/* No Button */}
       <group
-        position={[0.22, -0.2, 0.01]}
+        position={[0.17, -0.2, 0.01]}
         onPointerEnter={(e) => {
           e.stopPropagation();
           if (!isChecking) setHoveredButton("no");
@@ -157,7 +157,7 @@ export function VRPreciseCollisionPanel({
         }}
       >
         <mesh>
-          <RoundedPlane width={0.35} height={0.1} radius={0.03} />
+          <RoundedPlane width={0.3} height={0.1} radius={0.03} />
           <meshStandardMaterial
             color={isChecking ? "#9CA3AF" : hoveredButton === "no" ? "#F87171" : "#EF4444"}
             emissive={isChecking ? "#6B7280" : "#EF4444"}
@@ -177,9 +177,9 @@ export function VRPreciseCollisionPanel({
       </group>
 
       {/* No Button Shadow */}
-      <group position={[0.22, -0.21, 0]}>
+      <group position={[0.17, -0.21, 0]}>
         <mesh>
-          <RoundedPlane width={0.35} height={0.1} radius={0.03} />
+          <RoundedPlane width={0.3} height={0.1} radius={0.03} />
           <meshStandardMaterial
             color="#000000"
             opacity={0.15}

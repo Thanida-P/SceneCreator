@@ -29,8 +29,9 @@ export function WallPositionPanel({
   const panelHeight = 0.35;
 
   return (
-    <group>
-      <mesh position={[0, 0.5, -0.02]}>
+    <group position={[0.64, 0, 0]}>
+   
+      <mesh position={[0, 0, -0.02]}>
         <GradientBackground
           width={panelWidth}
           height={panelHeight}
@@ -42,7 +43,7 @@ export function WallPositionPanel({
       </mesh>
 
       <Text
-        position={[0, 0.58, 0.01]}
+        position={[-0.03, 0.08, 0.01]}
         fontSize={0.04}
         color="#0C4A6E"
         anchorX="center"
@@ -53,7 +54,7 @@ export function WallPositionPanel({
       </Text>
 
       <Text
-        position={[0, 0.5, 0.01]}
+        position={[-0.02, 0, 0.01]}
         fontSize={0.035}
         color="#0369A1"
         anchorX="center"
@@ -63,7 +64,7 @@ export function WallPositionPanel({
       </Text>
 
       <group
-        position={[-0.12, 0.4, 0.01]}
+        position={[-0.12, -0.1, 0.01]}
         onPointerEnter={(e) => { e.stopPropagation(); setHovered("in"); }}
         onPointerLeave={(e) => { e.stopPropagation(); setHovered(null); }}
         onPointerDown={(e) => { e.stopPropagation(); onMoveIn(); }}
@@ -76,13 +77,19 @@ export function WallPositionPanel({
             emissiveIntensity={hovered === "in" ? 0.4 : 0.2}
           />
         </mesh>
-        <Text position={[0.04, -0.133, 0.51]} fontSize={0.03} color="#FFFFFF" anchorX="center" anchorY="middle">
+        <Text
+          position={[0, 0, 0.01]}
+          fontSize={0.03}
+          color="#FFFFFF"
+          anchorX="center"
+          anchorY="middle"
+        >
           In
         </Text>
       </group>
 
       <group
-        position={[0.12, 0.4, 0.01]}
+        position={[0.1, -0.1, 0.01]}
         onPointerEnter={(e) => { e.stopPropagation(); setHovered("out"); }}
         onPointerLeave={(e) => { e.stopPropagation(); setHovered(null); }}
         onPointerDown={(e) => { e.stopPropagation(); onMoveOut(); }}
@@ -95,13 +102,19 @@ export function WallPositionPanel({
             emissiveIntensity={hovered === "out" ? 0.4 : 0.2}
           />
         </mesh>
-        <Text position={[-0.04, -0.133, 0.51]} fontSize={0.03} color="#FFFFFF" anchorX="center" anchorY="middle">
+        <Text
+          position={[0, 0, 0.01]}
+          fontSize={0.03}
+          color="#FFFFFF"
+          anchorX="center"
+          anchorY="middle"
+        >
           Out
         </Text>
       </group>
 
       <group
-        position={[0.24, 0.6, 0.01]}
+        position={[0.22, 0.1, 0.01]}
         onPointerEnter={(e) => { e.stopPropagation(); setHovered("close"); }}
         onPointerLeave={(e) => { e.stopPropagation(); setHovered(null); }}
         onPointerDown={(e) => { e.stopPropagation(); onClose(); }}
@@ -114,7 +127,13 @@ export function WallPositionPanel({
             emissiveIntensity={hovered === "close" ? 0.3 : 0.1}
           />
         </mesh>
-        <Text position={[0, -0.009, 0.01]} fontSize={0.025} color="#E2E8F0" anchorX="center" anchorY="middle">
+        <Text
+          position={[-0.004, 0, 0.01]}
+          fontSize={0.025}
+          color="#E2E8F0"
+          anchorX="center"
+          anchorY="middle"
+        >
           ✕
         </Text>
       </group>

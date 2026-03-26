@@ -42,7 +42,7 @@ export function VRSlider({
   return (
     <group position={position}>
     
-      <mesh position={[0, 0, -0.01]}>
+      <mesh position={[0, 3, -0.01]}>
         <GradientBackground width={0.5} height={0.15} radius={0.04} color1="#EAF4FA" color2="#F5F7FA" opacity={0.9} />
       </mesh>
       
@@ -54,7 +54,7 @@ export function VRSlider({
         onPointerDown={(e) => { e.stopPropagation(); onClose(); }}
       >
         <mesh>
-          <RoundedPlane width={0.05} height={0.05} radius={0.02} />
+          <RoundedPlane width={0.05} height={0.05} radius={0.06} />
           <meshStandardMaterial
             color={hoveredButton === "close" ? "#1E40AF" : "#334155"}
             emissive={hoveredButton === "close" ? "#66B9E2" : "#ccc"}
@@ -62,7 +62,7 @@ export function VRSlider({
           />
         </mesh>
         <Text
-          position={[-0.002, -0.005, 0.01]}
+          position={[-0.00, -0.005, 0.01]}
           fontSize={0.03}
           color="#334155"
           anchorX="center"
@@ -171,19 +171,19 @@ export function ScaleControlPanel({
     <group position={position}>
     
       <mesh position={[0, 0, -0.01]}>
-        <planeGeometry args={[0.6, 0.3]} />
-        <meshBasicMaterial color="#0F172A" opacity={0.9} transparent />
+        <RoundedPlane width={0.6} height={0.4} radius={0.04} /> 
+        <meshBasicMaterial color="#73aad5" opacity={0.85} transparent />  
       </mesh>
 
       <mesh position={[0, 0, 0]}>
-        <planeGeometry args={[0.62, 0.32]} />
-        <meshBasicMaterial color="#EC4899" opacity={0.5} transparent />
+        <RoundedPlane width={0.62} height={0.42} radius={0.04} />
+        <meshBasicMaterial color="#b7e0f5" opacity={0.7} transparent />   
       </mesh>
 
       <Text
         position={[0, 0.13, 0.01]}
         fontSize={0.04}
-        color="#FFFFFF"
+        color="#0a0808"
         anchorX="center"
         anchorY="middle"
       >
@@ -193,7 +193,7 @@ export function ScaleControlPanel({
       <Text
         position={[0, 0.07, 0.01]}
         fontSize={0.04}
-        color="#EC4899"
+        color="#1b1317"
         anchorX="center"
         anchorY="middle"
       >
@@ -219,15 +219,15 @@ export function ScaleControlPanel({
         <mesh>
           <RoundedPlane width={0.08} height={0.08} radius={0.015} />
           <meshStandardMaterial
-            color={hoveredButton === "decrease" ? "#EC4899" : "#1E293B"}
-            emissive={hoveredButton === "decrease" ? "#EC4899" : "#000000"}
+            color={hoveredButton === "decrease" ? "#f193c2" : "#b9edfb"}
+            emissive={hoveredButton === "decrease" ? "#f193c2" : "#b9edfb"}
             emissiveIntensity={hoveredButton === "decrease" ? 0.3 : 0}
           />
         </mesh>
         <Text
           position={[0, 0, 0.01]}
           fontSize={0.04}
-          color="#FFFFFF"
+          color="#000000"
           anchorX="center"
           anchorY="middle"
         >
@@ -254,15 +254,15 @@ export function ScaleControlPanel({
         <mesh>
           <RoundedPlane width={0.08} height={0.08} radius={0.015} />
           <meshStandardMaterial
-            color={hoveredButton === "increase" ? "#EC4899" : "#1E293B"}
-            emissive={hoveredButton === "increase" ? "#EC4899" : "#000000"}
+            color={hoveredButton === "increase" ? "#f193c2" : "#b9edfb"}
+            emissive={hoveredButton === "increase" ? "#f193c2" : "#b9edfb"}
             emissiveIntensity={hoveredButton === "increase" ? 0.3 : 0}
           />
         </mesh>
         <Text
           position={[0, 0, 0.01]}
           fontSize={0.04}
-          color="#FFFFFF"
+          color="#000000"
           anchorX="center"
           anchorY="middle"
         >
@@ -273,7 +273,7 @@ export function ScaleControlPanel({
    
       <mesh
         ref={trackRef}
-        position={[0, -0.05, 0]}
+        position={[0, -0.065, 0]}
         onPointerDown={(e) => {
           e.stopPropagation();
           setIsDragging(true);
@@ -293,7 +293,7 @@ export function ScaleControlPanel({
       </mesh>
 
     
-      <mesh position={[sliderPosition, -0.05, 0.01]}>
+      <mesh position={[sliderPosition, -0.065, 0.01]}>
         <sphereGeometry args={[0.015, 16, 16]} />
         <meshStandardMaterial
           color={isDragging ? "#EC4899" : "#C7E4FA"}
@@ -321,8 +321,8 @@ export function ScaleControlPanel({
         <mesh>
           <RoundedPlane width={0.2} height={0.06} radius={0.01} />
           <meshStandardMaterial
-            color={hoveredButton === "reset" ? "#F59E0B" : "#1E293B"}
-            emissive={hoveredButton === "reset" ? "#F59E0B" : "#000000"}
+            color={hoveredButton === "reset" ? "#7c5d26" : "#4c658f"}
+            emissive={hoveredButton === "reset" ? "#ea91d7" : "#161a1f"}
             emissiveIntensity={hoveredButton === "reset" ? 0.3 : 0}
           />
         </mesh>
@@ -339,7 +339,7 @@ export function ScaleControlPanel({
 
       
       <group
-        position={[0.28, 0.13, 0.01]}
+        position={[0.234, 0.13, 0.01]}
         onPointerEnter={(e) => {
           e.stopPropagation();
           setHoveredButton("close");
@@ -356,13 +356,13 @@ export function ScaleControlPanel({
         <mesh>
           <RoundedPlane width={0.06} height={0.06} radius={0.01} />
           <meshStandardMaterial
-            color={hoveredButton === "close" ? "#EF4444" : "#1E293B"}
-            emissive={hoveredButton === "close" ? "#EF4444" : "#000000"}
+            color={hoveredButton === "close" ? "#7c5d26" : "#4c658f"}
+            emissive={hoveredButton === "close" ? "#ea91d7" : "#161a1f"}
             emissiveIntensity={hoveredButton === "close" ? 0.3 : 0}
           />
         </mesh>
         <Text
-          position={[0, 0, 0.01]}
+          position={[0, 0, 0.001]}
           fontSize={0.035}
           color="#FFFFFF"
           anchorX="center"
