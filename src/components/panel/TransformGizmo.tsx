@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import * as THREE from "three";
+import { pass } from "three/tsl";
 
 interface TransformGizmoProps {
   position: [number, number, number];
@@ -27,8 +28,17 @@ function AxisArrow({ axis, color, position, rotation, worldAxis, onAxisDrag, ren
   const handlePointerDown = (e: any) => {
     e.stopPropagation();
     setDragging(true);
+    setHovered(true);
     if (e.point) {
       dragStartRef.current = new THREE.Vector3(e.point.x, e.point.y, e.point.z);
+    }
+
+    if (e.target?.setPointerCapture && typeof e.pointerId !== "undefined") {
+      try {
+        e.target.setPointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
     }
   };
 
@@ -51,18 +61,49 @@ function AxisArrow({ axis, color, position, rotation, worldAxis, onAxisDrag, ren
   const handlePointerUp = (e: any) => {
     if (!dragging) return;
     e.stopPropagation();
+    if (e.target?.releasePointerCapture && typeof e.pointerId !== "undefined") {
+      try {
+        e.target.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+    }
     setDragging(false);
+    setHovered(false);
     dragStartRef.current = null;
+    document.body.style.cursor = 'auto';
+  };
+
+  const handlePointerCancel = (e: any) => {
+    if (!dragging) return;
+    e.stopPropagation();
+    if (e.target?.releasePointerCapture && typeof e.pointerId !== "undefined") {
+      try {
+        e.target.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+    }
+    setDragging(false);
+    setHovered(false);
+    dragStartRef.current = null;
+    document.body.style.cursor = 'auto';
   };
 
   useEffect(() => {
     if (!dragging) return;
-    const handleGlobalPointerUp = () => {
+    const handleGlobalPointerEnd = () => {
       setDragging(false);
       dragStartRef.current = null;
+      setHovered(false);
+      document.body.style.cursor = 'auto';
     };
-    document.addEventListener('pointerup', handleGlobalPointerUp);
-    return () => document.removeEventListener('pointerup', handleGlobalPointerUp);
+    document.addEventListener('pointerup', handleGlobalPointerEnd);
+    document.addEventListener('pointercancel', handleGlobalPointerEnd);
+    return () => {
+      document.removeEventListener('pointerup', handleGlobalPointerEnd);
+      document.removeEventListener('pointercancel', handleGlobalPointerEnd);
+    };
   }, [dragging]);
 
   const handlePointerEnter = (e: any) => {
@@ -88,6 +129,7 @@ function AxisArrow({ axis, color, position, rotation, worldAxis, onAxisDrag, ren
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}
         userData={{ isGizmo: true, axis }}
