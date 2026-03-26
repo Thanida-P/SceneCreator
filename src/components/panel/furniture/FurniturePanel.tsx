@@ -128,10 +128,10 @@ export function VRFurniturePanel({
   const categoryBarHeight = 0.35;
   const itemHeight = 0.45;
   const paginationHeight = 0.15;
-  const topPadding = 0;
+  const topPadding = -0.056;
   const bottomPadding = 0.01;
 
-  const panelHeight = 1.4;
+  const panelHeight = 1.35;
   const panelWidth = 1;
 
 
