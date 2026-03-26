@@ -95,11 +95,19 @@ export class FurnitureItem extends Base3DObject {
     newPos[1] += deltaVertical;
     
     // Move horizontally along the wall
-    if (Math.abs(wallNormal[2]) > Math.abs(wallNormal[0])) {
-      newPos[0] += deltaHorizontal;
-    } else {
-      newPos[2] += deltaHorizontal;
-    }
+    const n = new THREE.Vector3(...wallNormal);
+    if (n.lengthSq() > 0) n.normalize();
+
+    const tangentBasis =
+      Math.abs(n.z) > Math.abs(n.x) ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+
+    const tangent = tangentBasis
+      .clone()
+      .sub(n.clone().multiplyScalar(tangentBasis.dot(n)))
+      .normalize();
+
+    newPos[0] += tangent.x * deltaHorizontal;
+    newPos[2] += tangent.z * deltaHorizontal;
 
     return newPos;
   }

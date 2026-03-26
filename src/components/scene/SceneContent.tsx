@@ -737,7 +737,28 @@ class SceneContentLogic {
           ];
           if (!wallNormal.every((n) => Number.isFinite(n))) return null;
 
-          return { wallNormal, wallPosition: wallPositionNum };
+          const len = Math.hypot(wallNormal[0], wallNormal[1], wallNormal[2]);
+          const wallNormalNormalized: [number, number, number] =
+            len > 1e-9
+              ? [wallNormal[0] / len, wallNormal[1] / len, wallNormal[2] / len]
+              : wallNormal;
+
+          const roomBoundary = this.sceneManager?.collisionDetector.getRoomBoundary();
+          let wallPositionPlane = wallPositionNum;
+          if (roomBoundary) {
+            const nx = wallNormalNormalized[0];
+            const nz = wallNormalNormalized[2];
+            const isAxisX = Math.abs(nx) >= 0.99 && Math.abs(nz) < 0.01;
+            const isAxisZ = Math.abs(nz) >= 0.99 && Math.abs(nx) < 0.01;
+
+            if (isAxisX) {
+              wallPositionPlane = nx > 0 ? roomBoundary.min.x : -roomBoundary.max.x;
+            } else if (isAxisZ) {
+              wallPositionPlane = nz > 0 ? roomBoundary.min.z : -roomBoundary.max.z;
+            }
+          }
+
+          return { wallNormal: wallNormalNormalized, wallPosition: wallPositionPlane };
         };
 
         const getWallPlacementFromRoomBoundarySideId = (
@@ -750,13 +771,13 @@ class SceneContentLogic {
           const { min, max } = roomBoundary;
           switch (wallSideId) {
             case "wall-x-max":
-              return { wallNormal: [-1, 0, 0], wallPosition: max.x };
+              return { wallNormal: [-1, 0, 0], wallPosition: -max.x };
             case "wall-x-min":
               return { wallNormal: [1, 0, 0], wallPosition: min.x };
             case "wall-z-min":
               return { wallNormal: [0, 0, 1], wallPosition: min.z };
             case "wall-z-max":
-              return { wallNormal: [0, 0, -1], wallPosition: max.z };
+              return { wallNormal: [0, 0, -1], wallPosition: -max.z };
             default:
               return null;
           }
@@ -780,9 +801,9 @@ class SceneContentLogic {
             dist: number;
           }> = [
             { wallNormal: [1, 0, 0], wallPosition: min.x, dist: Math.abs(x - min.x) },
-            { wallNormal: [-1, 0, 0], wallPosition: max.x, dist: Math.abs(x - max.x) },
+            { wallNormal: [-1, 0, 0], wallPosition: -max.x, dist: Math.abs(x - max.x) },
             { wallNormal: [0, 0, 1], wallPosition: min.z, dist: Math.abs(z - min.z) },
-            { wallNormal: [0, 0, -1], wallPosition: max.z, dist: Math.abs(z - max.z) },
+            { wallNormal: [0, 0, -1], wallPosition: -max.z, dist: Math.abs(z - max.z) },
           ];
 
           const nearest = candidates.reduce((best, c) => (c.dist < best.dist ? c : best), candidates[0]);
@@ -1316,6 +1337,7 @@ class SceneContentLogic {
 
         this.navigationController.setAlignmentCallbacks(
           (state, _data) => {
+            void _data;
             this.updateState({ alignmentState: state });
 
             if (state === 'selectingCorner') {
@@ -1465,6 +1487,7 @@ class SceneContentLogic {
             }
           },
           (_transform) => {
+            void _transform;
             homeModel.syncTransformFromGroup();
             const g = homeModel.getGroup();
             g.updateMatrixWorld(true);
@@ -3276,8 +3299,9 @@ class SceneContentLogic {
     }
     this.lastFrameWhiteboardDrawing = whiteboardDrawingThisFrame;
 
-    const canNavigate = (this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world") ||
-                       (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free");
+    const canNavigate = !this.state.showAvatarMode &&
+      ((this.state.alignmentStatus === "aligning" && this.state.alignmentMode === "world") ||
+       (this.state.alignmentStatus === "aligned" && this.state.alignmentMode === "free"));
     if (canNavigate && !whiteboardDrawingThisFrame) {
       this.navigationController?.update(session, camera, delta);
     }
@@ -3985,12 +4009,17 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
                   ]
                 : undefined
             }
-            hiddenItemIds={
-              state.selectedItemId &&
-              logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
-                ? ["movement", "rotation"]
-                : undefined
-            }
+            hiddenItemIds={(() => {
+              const hidden: string[] = [];
+              if (isPassthroughARMode) hidden.push("avatar");
+              if (
+                state.selectedItemId &&
+                logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
+              ) {
+                hidden.push("movement", "rotation");
+              }
+              return hidden.length > 0 ? hidden : undefined;
+            })()}
           />
         </group>
       </HeadLockedUI>

@@ -21,6 +21,7 @@ const WALK_SPEED = 2.0;
 const FADE_DURATION = 0.2;
 const CAMERA_HEIGHT = 2.5;
 const CAMERA_DISTANCE = 5.0;
+const THUMBSTICK_DEADZONE = 0.15;
 
 const RPM_FORWARD_OFFSET = Math.PI;
 
@@ -132,9 +133,24 @@ function AvatarControllerInner({ avatarUrl }: AvatarControllerInnerProps) {
     currentActionRef.current = key;
   }
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (!groupRef.current) return;
     const pos = groupRef.current.position;
+
+    let thumbX = 0;
+    let thumbZ = 0;
+    const xrSession = (state.gl as any).xr?.getSession?.();
+    if (xrSession?.inputSources) {
+      for (const source of xrSession.inputSources) {
+        if (source.handedness !== "left") continue;
+        const axes = source.gamepad?.axes;
+        if (!axes || axes.length < 4) continue;
+        const ax = typeof axes[2] === "number" ? axes[2] : 0;
+        const az = typeof axes[3] === "number" ? axes[3] : 0;
+        if (Math.abs(ax) > THUMBSTICK_DEADZONE) thumbX = ax;
+        if (Math.abs(az) > THUMBSTICK_DEADZONE) thumbZ = az;
+      }
+    }
 
     if (!rigRef.current) {
       const found = threeScene.getObjectByName("CustomXRRig");
@@ -160,7 +176,18 @@ function AvatarControllerInner({ avatarUrl }: AvatarControllerInnerProps) {
       }
     }
 
-    if (!isXR) camera.lookAt(pos.x, pos.y + 1, pos.z);
+    if (cameraInitRef.current) {
+      const avatarRotY = groupRef.current.rotation.y;
+      const targetX = pos.x - Math.sin(avatarRotY) * CAMERA_DISTANCE;
+      const targetZ = pos.z - Math.cos(avatarRotY) * CAMERA_DISTANCE;
+      const followSpeed = Math.min(6 * delta, 1);
+      followTarget.position.x = THREE.MathUtils.lerp(followTarget.position.x, targetX, followSpeed);
+      followTarget.position.z = THREE.MathUtils.lerp(followTarget.position.z, targetZ, followSpeed);
+      if (!isXR) {
+        followTarget.position.y = pos.y + CAMERA_HEIGHT;
+        camera.lookAt(pos.x, pos.y + 1, pos.z);
+      }
+    }
 
     if (pendingJumpRef.current) {
       pendingJumpRef.current = false;
@@ -282,14 +309,19 @@ function AvatarControllerInner({ avatarUrl }: AvatarControllerInnerProps) {
       }
     }
 
+    const keys = keysRef.current;
+    const I = keys["i"] || thumbZ < 0;
+    const K = keys["k"] || thumbZ > 0;
+    const J = keys["j"] || thumbX < 0;
+    const L = keys["l"] || thumbX > 0;
+    const isMoving = !!(I || K || J || L);
+
     if (
       !isJumpingRef.current &&
       !isWavingRef.current &&
       !isSittingRef.current &&
       !isSleepingRef.current
     ) {
-      const keys = keysRef.current;
-      const isMoving = !!(keys["i"] || keys["k"] || keys["j"] || keys["l"]);
       if (isMoving) {
         const walkKey = findKey("walk");
         if (walkKey) switchAction(walkKey);
@@ -298,13 +330,6 @@ function AvatarControllerInner({ avatarUrl }: AvatarControllerInnerProps) {
         if (idleKey) switchAction(idleKey);
       }
     }
-
-    const keys = keysRef.current;
-    const I = keys["i"],
-      K = keys["k"],
-      J = keys["j"],
-      L = keys["l"];
-    const isMoving = !!(I || K || J || L);
 
     if (
       isMoving &&
@@ -322,6 +347,10 @@ function AvatarControllerInner({ avatarUrl }: AvatarControllerInnerProps) {
         else dirOffset = Math.PI;
       } else if (J) dirOffset = Math.PI / 2;
       else if (L) dirOffset = -Math.PI / 2;
+     
+      const keyboardActive = !!(keys["i"] || keys["k"] || keys["j"] || keys["l"]);
+      const thumbMagnitude = Math.min(Math.sqrt(thumbX * thumbX + thumbZ * thumbZ), 1.0);
+      const speedFactor = keyboardActive ? 1.0 : thumbMagnitude;
 
       const camWorldPos = new THREE.Vector3();
       camera.getWorldPosition(camWorldPos);
@@ -344,14 +373,11 @@ function AvatarControllerInner({ avatarUrl }: AvatarControllerInnerProps) {
       walkDir.normalize();
       walkDir.applyAxisAngle(new THREE.Vector3(0, 1, 0), dirOffset);
 
-      const moveX = walkDir.x * WALK_SPEED * delta;
-      const moveZ = walkDir.z * WALK_SPEED * delta;
+      const moveX = walkDir.x * WALK_SPEED * speedFactor * delta;
+      const moveZ = walkDir.z * WALK_SPEED * speedFactor * delta;
 
       groupRef.current.position.x += moveX;
       groupRef.current.position.z += moveZ;
-      followTarget.position.x += moveX;
-      followTarget.position.z += moveZ;
-
     }
   });
 
