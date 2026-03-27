@@ -144,7 +144,7 @@ export function ScaleControlPanel({
     const inverseTrackMatrix = new THREE.Matrix4().copy(trackMatrix).invert();
     const localPoint = e.point.clone().applyMatrix4(inverseTrackMatrix);
 
-    const normalizedX = (localPoint.x + 0.25) / 0.5;
+    const normalizedX = (localPoint.x + 0.2) / 0.4;
     const clampedX = Math.max(0, Math.min(1, normalizedX));
     const newValue = MIN_SCALE + clampedX * (MAX_SCALE - MIN_SCALE);
 
@@ -163,7 +163,7 @@ export function ScaleControlPanel({
     onScaleChange(1);
   };
 
-  const sliderPosition = ((currentScale - MIN_SCALE) / (MAX_SCALE - MIN_SCALE)) * 0.5 - 0.25;
+  const sliderPosition = ((currentScale - MIN_SCALE) / (MAX_SCALE - MIN_SCALE)) * 0.4 - 0.2;
   const clampedValue = Math.max(MIN_SCALE, Math.min(MAX_SCALE, currentScale));
   const displayValue = clampedValue.toFixed(2);
 

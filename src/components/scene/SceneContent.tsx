@@ -2782,6 +2782,7 @@ class SceneContentLogic {
     const showMovementGizmo = !isWallpaper && this.state.sidebarActiveItem === 'movement';
     const showRotGizmo = !isWallpaper && this.state.sidebarActiveItem === 'rotation';
     const isTextureMode = this.state.sidebarActiveItem === "texture";
+    const isScaleMode = this.state.sidebarActiveItem === "scale";
 
     // Track wall-mountable state
     const placementMode = furniture.getPlacementMode();
@@ -2796,9 +2797,9 @@ class SceneContentLogic {
         showRotationGizmo: showRotGizmo,
         rotationGizmoPosition: showRotGizmo ? position : null,
         selectedItemPlacementMode: placementMode,
-
         showTexturePanel: false,
         textureOptions: [],
+        showScalePanel: isScaleMode, 
       });
 
       if (isTextureMode) {
@@ -3517,7 +3518,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     state.showNotification ||
     state.showMoveCloserPanel ||
     state.showUnmountPanel ||
-    state.showScalePanel ||
+    //state.showScalePanel ||
     state.showWallPanel ||
     state.showPreciseCheckPanel ||
     state.showAlignmentPanel ||
