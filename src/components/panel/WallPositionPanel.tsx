@@ -60,7 +60,7 @@ export function WallPositionPanel({
         anchorX="center"
         anchorY="middle"
       >
-        {(distanceFromWall ?? 0).toFixed(2)} m / {maxDistance.toFixed(2)} m
+        {Math.min(distanceFromWall ?? 0, maxDistance).toFixed(2)} m / {maxDistance.toFixed(2)} m
       </Text>
 
       <group
@@ -84,7 +84,7 @@ export function WallPositionPanel({
           anchorX="center"
           anchorY="middle"
         >
-          In
+          Closer
         </Text>
       </group>
 
@@ -109,7 +109,7 @@ export function WallPositionPanel({
           anchorX="center"
           anchorY="middle"
         >
-          Out
+          Further
         </Text>
       </group>
 
