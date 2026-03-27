@@ -52,15 +52,15 @@ export function TextureSelectorPanel({
         <GradientBackground width={panelWidth} height={panelHeight} radius={0.1} color1="#EAF4FA" color2="#F0F2F5" opacity={0.85} />
       </mesh>
 
-      <mesh position={[0, 0, -0.03]}>
+      <mesh position={[0, 0, -0.045]}>
         <RoundedPlane width={panelWidth} height={panelHeight} radius={0.1} />
         <meshStandardMaterial color="#000000" opacity={0.2} transparent roughness={1.0} />
       </mesh>
 
       <Text
-        position={[0, panelHeight / 2 - 0.12, 0.01]}
-        fontSize={0.05}
-        color="#334155"
+        position={[-0.01, panelHeight / 2 - 0.12, 0.01]}
+        fontSize={0.04}
+        color="#0a0808"
         anchorX="center"
         anchorY="middle"
         fontWeight="normal"
