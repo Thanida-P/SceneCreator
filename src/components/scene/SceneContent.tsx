@@ -2797,6 +2797,7 @@ class SceneContentLogic {
         showRotationGizmo: showRotGizmo,
         rotationGizmoPosition: showRotGizmo ? position : null,
         selectedItemPlacementMode: placementMode,
+        showWallPanel: false,
         showTexturePanel: false,
         textureOptions: [],
         showScalePanel: isScaleMode, 

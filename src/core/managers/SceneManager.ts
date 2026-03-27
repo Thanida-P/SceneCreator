@@ -878,7 +878,8 @@ export class SceneManager {
 
     // Apply in/out from wall with max-distance constraint
     if (Math.abs(deltaInOut) >= 0.001) {
-      const currentDist = this.getDistanceFromWall(currentPosition, wallPlacement);
+      const rawDist = this.getDistanceFromWall(currentPosition, wallPlacement);
+      const currentDist = Math.min(rawDist, MAX_WALL_MOUNT_DISTANCE);
       const requestedDist = currentDist + deltaInOut;
       const wallDistanceEpsilon = 0.0001;
       if (requestedDist > MAX_WALL_MOUNT_DISTANCE) {
@@ -909,9 +910,10 @@ export class SceneManager {
       newPosition[2] = posWithDist[2];
     }
     
-    // Check if the new position would hit another wall
+    // Check if the new position would hit another wall.
+    const hasTangentMovement = Math.abs(deltaVertical) > 0.0001 || Math.abs(deltaHorizontal) > 0.0001;
     const roomBoundary = this.collisionDetector.getRoomBoundary();
-    if (roomBoundary) {
+    if (roomBoundary && hasTangentMovement) {
       const wallPlacement = furniture.getWallPlacement();
       if (wallPlacement) {
         const wallNormal = wallPlacement.wallNormal;
@@ -971,57 +973,22 @@ export class SceneManager {
     furniture.setPosition(newPosition);
     this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
 
-    const boxAfterMove = this.collisionDetector.furnitureBoxes.get(id);
-    const roomCollisionAfterMove = this.collisionDetector.checkRoomCollision(id);
-    if (roomCollisionAfterMove.hasCollision && boxAfterMove) {
-      const constrainedVec = this.collisionDetector.constrainToRoom(
-        new THREE.Vector3(newPosition[0], newPosition[1], newPosition[2]),
-        boxAfterMove
-      );
-      const constrainedPos: [number, number, number] = [
-        constrainedVec.x,
-        constrainedVec.y,
-        constrainedVec.z,
-      ];
-
-      furniture.setPosition(constrainedPos);
-      this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
-
-      const roomCollisionAfterClamp = this.collisionDetector.checkRoomCollision(id);
-      if (roomCollisionAfterClamp.hasCollision) {
-        furniture.setPosition(currentPosition);
-        this.collisionDetector.updateFurnitureBox(
-          id,
-          furniture.getGroup(),
-          furniture.getModelId()
-        );
-        furniture.setCollision(true);
-        return {
-          success: false,
-          needsConfirmation: false,
-          needsPreciseCheck: false,
-          reason: 'Cannot move further - wall boundary reached',
-        };
-      }
-
-      newPosition[0] = constrainedPos[0];
-      newPosition[1] = constrainedPos[1];
-      newPosition[2] = constrainedPos[2];
-    }
-
     if (this.config.enableCollisionDetection) {
-      const hasAABBCollision = this.collisionDetector.checkAABBCollisionOnly(id);
+      const isWallMounted = !!furniture.getWallPlacement();
+      if (!isWallMounted) {
+        const hasAABBCollision = this.collisionDetector.checkAABBCollisionOnly(id);
 
-      if (hasAABBCollision) {
-        furniture.setPosition(currentPosition);
-        this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
-        furniture.setCollision(true);
-        return {
-          success: false,
-          needsConfirmation: true,
-          needsPreciseCheck: false,
-          reason: 'Close to another object',
-        };
+        if (hasAABBCollision) {
+          furniture.setPosition(currentPosition);
+          this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+          furniture.setCollision(true);
+          return {
+            success: false,
+            needsConfirmation: true,
+            needsPreciseCheck: false,
+            reason: 'Close to another object',
+          };
+        }
       }
 
       await this.updateFurnitureCollision(id);
@@ -1114,6 +1081,20 @@ export class SceneManager {
     return MAX_WALL_MOUNT_DISTANCE;
   }
 
+  snapFurnitureToWallSurface(id: string): void {
+    const furniture = this.furnitureItems.get(id);
+    const wallPlacement = furniture?.getWallPlacement();
+    if (!furniture || !wallPlacement) return;
+
+    const snapped = this.clampPositionToWallDistance(
+      furniture.getPosition(),
+      wallPlacement,
+      0
+    );
+    furniture.setPosition(snapped);
+    this.collisionDetector.updateFurnitureBox(id, furniture.getGroup(), furniture.getModelId());
+  }
+
   private adjustPositionToWall(
     id: string,
     position: [number, number, number],
@@ -1121,11 +1102,10 @@ export class SceneManager {
     wallPosition: number
   ): [number, number, number] {
     void id;
-    const wallOffset = 0.02;
     return this.clampPositionToWallDistance(
       position,
       { wallNormal, wallPosition },
-      wallOffset
+      0
     );
   }
 
