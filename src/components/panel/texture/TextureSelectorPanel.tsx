@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Text } from "@react-three/drei";
-import { RoundedPlane, GradientBackground, ButtonBackground} from "../common/PanelElements";
+import { RoundedPlane, GradientBackground } from "../common/PanelElements";
 import * as THREE from "three";
 
 export interface TextureOption {
