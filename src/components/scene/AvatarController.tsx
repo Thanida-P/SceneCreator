@@ -18,11 +18,11 @@ for (const [path, url] of Object.entries(_globs)) {
 export const DEFAULT_AVATAR_URL = AVATAR_URL_MAP[4] ?? "";
 
 const WALK_SPEED = 2.0;
-const CAM_MOVE_SPEED = 2.0;   // right-stick camera speed in XR (matches NavigationController)
+const CAM_MOVE_SPEED = 2.0;
 const FADE_DURATION = 0.2;
 const THUMBSTICK_DEADZONE = 0.15;
-const BOUNDARY_MARGIN = 0.3;  // keep avatar this far from room walls
-const SPAWN_DISTANCE = 1.5;   // units in front of camera on spawn (increase to push further away)
+const BOUNDARY_MARGIN = 0.3;
+const SPAWN_DISTANCE = 1.5;
 
 export interface RoomBoundary {
   minX: number; maxX: number;
@@ -61,11 +61,8 @@ function AvatarControllerInner({
   const prevActionRef = useRef("Idle");
 
   const animReadyRef = useRef(false);
-  // Camera yaw is read live from the camera every frame so IJKL directions
-  // always stay relative to wherever the user has panned the camera.
   const cameraYawRef = useRef(0);
 
-  // ── Spawn ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!groupRef.current) return;
     const camPos = new THREE.Vector3();
@@ -78,18 +75,15 @@ function AvatarControllerInner({
     if (spawnPosition) {
       groupRef.current.position.set(spawnPosition[0], 0, spawnPosition[2]);
     } else {
-      // Place avatar SPAWN_DISTANCE units in front of the camera
       groupRef.current.position.set(
         camPos.x + fwd.x * SPAWN_DISTANCE,
         0,
         camPos.z + fwd.z * SPAWN_DISTANCE
       );
     }
-    // Face the same direction the camera is looking
     groupRef.current.rotation.y = Math.atan2(fwd.x, fwd.z);
   }, []);
 
-  // ── Keyboard listeners ─────────────────────────────────────────────────────
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -106,7 +100,6 @@ function AvatarControllerInner({
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, []);
 
-  // ── Animation helpers ──────────────────────────────────────────────────────
   function findKey(keyword: string): string | null {
     const kw = keyword.toLowerCase();
     const names = Object.keys(actions);
@@ -130,14 +123,12 @@ function AvatarControllerInner({
     currentActionRef.current = k;
   }
 
-  // ── Per-frame logic ────────────────────────────────────────────────────────
   useFrame((state, delta) => {
     if (!groupRef.current) return;
     const pos = groupRef.current.position;
 
-    // ── XR thumbstick input ──
-    let thumbX = 0, thumbZ = 0;         // left  → avatar movement
-    let camThumbX = 0, camThumbZ = 0;   // right → camera (rig) movement
+    let thumbX = 0, thumbZ = 0;
+    let camThumbX = 0, camThumbZ = 0;
     const xrSession = (state.gl as any).xr?.getSession?.();
     if (xrSession?.inputSources) {
       for (const src of xrSession.inputSources) {
@@ -155,8 +146,6 @@ function AvatarControllerInner({
       }
     }
 
-    // ── Right thumbstick → move XR rig (freeroam camera in VR) ──
-    // Mirrors NavigationController exactly: forward * -Z + right * X
     if (camThumbX !== 0 || camThumbZ !== 0) {
       if (!rigRef.current) {
         const found = threeScene.getObjectByName("CustomXRRig");
@@ -175,7 +164,6 @@ function AvatarControllerInner({
       }
     }
 
-    // ── Start idle on first frame animations are available ──
     if (!animReadyRef.current && Object.keys(actions).length > 0) {
       animReadyRef.current = true;
       console.log("[AvatarController] clips:", Object.keys(actions));
@@ -186,7 +174,6 @@ function AvatarControllerInner({
       }
     }
 
-    // ── Update camera yaw live from wherever OrbitControls has moved it ──
     const camFwdLive = new THREE.Vector3();
     camera.getWorldDirection(camFwdLive);
     camFwdLive.y = 0;
@@ -195,7 +182,6 @@ function AvatarControllerInner({
       cameraYawRef.current = Math.atan2(camFwdLive.x, camFwdLive.z);
     }
 
-    // ── One-shot actions ──────────────────────────────────────────────────
     if (pendingJumpRef.current) {
       pendingJumpRef.current = false;
       const a = findAction("jump");
@@ -280,7 +266,6 @@ function AvatarControllerInner({
       }
     }
 
-    // ── Movement ─────────────────────────────────────────────────────────
     const keys = keysRef.current;
     const I = keys["i"] || thumbZ < 0;
     const K = keys["k"] || thumbZ > 0;
@@ -301,8 +286,6 @@ function AvatarControllerInner({
       const thumbMag  = Math.min(Math.sqrt(thumbX * thumbX + thumbZ * thumbZ), 1.0);
       const speedFactor = keyboardActive ? 1.0 : thumbMag;
 
-      // Forward / right come from the camera's current orientation (updated
-      // live above), so IJKL always makes sense relative to the user's view.
       const yaw = cameraYawRef.current;
       const camFwd   = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
       const camRight = new THREE.Vector3().crossVectors(camFwd, new THREE.Vector3(0, 1, 0)).normalize();
@@ -314,14 +297,12 @@ function AvatarControllerInner({
       if (L) moveDir.addScaledVector(camRight,  1);  // strafe right
       if (moveDir.lengthSq() > 0) moveDir.normalize();
 
-      // Avatar faces its movement direction
       const faceAngle = Math.atan2(moveDir.x, moveDir.z);
       let diff = faceAngle - groupRef.current.rotation.y;
       while (diff >  Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
       groupRef.current.rotation.y += diff * Math.min(8 * delta, 1);
 
-      // Translate then clamp to room boundary
       const newX = pos.x + moveDir.x * WALK_SPEED * speedFactor * delta;
       const newZ = pos.z + moveDir.z * WALK_SPEED * speedFactor * delta;
 
@@ -342,7 +323,6 @@ function AvatarControllerInner({
   );
 }
 
-// ── Error boundary ─────────────────────────────────────────────────────────
 interface ErrorBoundaryState { hasError: boolean; }
 
 class AvatarErrorBoundary extends React.Component<
@@ -358,7 +338,6 @@ class AvatarErrorBoundary extends React.Component<
   render() { return this.state.hasError ? null : this.props.children; }
 }
 
-// ── Public API ─────────────────────────────────────────────────────────────
 export interface AvatarControllerProps {
   avatarUrl?: string;
   spawnPosition?: [number, number, number];

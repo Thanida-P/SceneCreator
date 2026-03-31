@@ -38,7 +38,6 @@ import {
 import { makeAuthenticatedRequest, logout } from "../../utils/Auth";
 import { compressWallpaperEntriesInDeployedItems } from "../../utils/compressImageForStorage";
 import { VRSidebar } from "../panel/VRSidebar";
-// import { VRAlignmentPanel, VRAlignmentConfirmPanel } from "../panel/VRAlignmentPanel";
 import { VRAlignmentPanel } from "../panel/VRAlignmentPanel";
 import { TransformGizmo } from "../panel/TransformGizmo";
 import { RotationGizmo } from "../panel/RotationGizmo";
@@ -2030,11 +2029,9 @@ class SceneContentLogic {
           sidebarActiveItem: null,
         });
       } else {
-        // Activate avatar mode – close all other panels first
         this.navigationController?.setEnabled(false);
         const savedAvatarIdx = parseInt(localStorage.getItem("selectedAvatarIndex") ?? "4", 10);
 
-        // Compute house bounding box for spawn point and room boundary
         let spawnPos: [number, number, number] | null = null;
         let roomBoundary: { minX: number; maxX: number; minZ: number; maxZ: number } | null = null;
         const homeModel = this.sceneManager?.getHomeModel();
@@ -4068,7 +4065,6 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           />
         </group>
       </HeadLockedUI>
-      {/* ── Avatar 3rd-person mode ── */}
       {state.showAvatarMode && AVATAR_URL_MAP[state.selectedAvatarIndex] && (
         <AvatarController
           key={`avatar-${state.selectedAvatarIndex}`}
@@ -4078,7 +4074,6 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           onLoadError={() => logic.updateState({ avatarLoadError: true })}
         />
       )}
-      {/* ── Free camera navigation in avatar mode (desktop only) ── */}
       {state.showAvatarMode && !xr.session && (
         <OrbitControls
           makeDefault
