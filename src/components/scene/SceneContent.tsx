@@ -346,6 +346,8 @@ class SceneContentLogic {
       showAvatarMode: false,
       avatarLoadError: false,
       selectedAvatarIndex: parseInt(localStorage.getItem("selectedAvatarIndex") ?? "4", 10),
+      avatarSpawnPosition: null,
+      avatarHomeModelGroup: null,
       immersiveSessionKind: null,
     };
   }
