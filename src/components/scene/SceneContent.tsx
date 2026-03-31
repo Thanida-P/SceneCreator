@@ -204,7 +204,7 @@ interface SceneState {
   avatarLoadError: boolean;
   selectedAvatarIndex: number;
   avatarSpawnPosition: [number, number, number] | null;
-  avatarRoomBoundary: { minX: number; maxX: number; minZ: number; maxZ: number } | null;
+  avatarHomeModelGroup: THREE.Group | null;
   whiteboardTool: WhiteboardTool;
   showCornerSelection: boolean;
   showHeadTrackingAlignment: boolean;
@@ -2033,7 +2033,7 @@ class SceneContentLogic {
         const savedAvatarIdx = parseInt(localStorage.getItem("selectedAvatarIndex") ?? "4", 10);
 
         let spawnPos: [number, number, number] | null = null;
-        let roomBoundary: { minX: number; maxX: number; minZ: number; maxZ: number } | null = null;
+        let homeModelGroup: THREE.Group | null = null;
         const homeModel = this.sceneManager?.getHomeModel();
         if (homeModel) {
           const group = homeModel.getGroup();
@@ -2043,10 +2043,7 @@ class SceneContentLogic {
               const center = new THREE.Vector3();
               bbox.getCenter(center);
               spawnPos = [center.x, 0, center.z];
-              roomBoundary = {
-                minX: bbox.min.x, maxX: bbox.max.x,
-                minZ: bbox.min.z, maxZ: bbox.max.z,
-              };
+              homeModelGroup = group;
             }
           }
         }
@@ -2054,7 +2051,7 @@ class SceneContentLogic {
         this.updateState({
           showAvatarMode: true,
           avatarSpawnPosition: spawnPos,
-          avatarRoomBoundary: roomBoundary,
+          avatarHomeModelGroup: homeModelGroup,
           selectedAvatarIndex: savedAvatarIdx,
           showFurniture: false,
           showControlPanel: false,
@@ -3411,7 +3408,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     avatarLoadError: false,
     selectedAvatarIndex: 4,
     avatarSpawnPosition: null,
-    avatarRoomBoundary: null,
+    avatarHomeModelGroup: null,
     immersiveSessionKind: null,
   });
 
@@ -4070,7 +4067,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           key={`avatar-${state.selectedAvatarIndex}`}
           avatarUrl={AVATAR_URL_MAP[state.selectedAvatarIndex]!}
           spawnPosition={state.avatarSpawnPosition ?? undefined}
-          roomBoundary={state.avatarRoomBoundary ?? undefined}
+          homeModelGroup={state.avatarHomeModelGroup ?? undefined}
           onLoadError={() => logic.updateState({ avatarLoadError: true })}
         />
       )}

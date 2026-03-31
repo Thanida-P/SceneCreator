@@ -24,21 +24,16 @@ const THUMBSTICK_DEADZONE = 0.15;
 const BOUNDARY_MARGIN = 0.3;
 const SPAWN_DISTANCE = 1.5;
 
-export interface RoomBoundary {
-  minX: number; maxX: number;
-  minZ: number; maxZ: number;
-}
-
 interface AvatarControllerInnerProps {
   avatarUrl: string;
   spawnPosition?: [number, number, number];
-  roomBoundary?: RoomBoundary;
+  homeModelGroup?: THREE.Group;
 }
 
 function AvatarControllerInner({
   avatarUrl,
   spawnPosition,
-  roomBoundary,
+  homeModelGroup,
 }: AvatarControllerInnerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const { camera, scene: threeScene } = useThree();
@@ -62,6 +57,7 @@ function AvatarControllerInner({
 
   const animReadyRef = useRef(false);
   const cameraYawRef = useRef(0);
+  const localBboxRef = useRef<THREE.Box3 | null>(null);
 
   useEffect(() => {
     if (!groupRef.current) return;
@@ -306,9 +302,31 @@ function AvatarControllerInner({
       const newX = pos.x + moveDir.x * WALK_SPEED * speedFactor * delta;
       const newZ = pos.z + moveDir.z * WALK_SPEED * speedFactor * delta;
 
-      if (roomBoundary) {
-        pos.x = THREE.MathUtils.clamp(newX, roomBoundary.minX + BOUNDARY_MARGIN, roomBoundary.maxX - BOUNDARY_MARGIN);
-        pos.z = THREE.MathUtils.clamp(newZ, roomBoundary.minZ + BOUNDARY_MARGIN, roomBoundary.maxZ - BOUNDARY_MARGIN);
+      if (homeModelGroup) {
+        if (!localBboxRef.current) {
+          const savedPos = homeModelGroup.position.clone();
+          const savedRot = homeModelGroup.rotation.clone();
+          const savedScale = homeModelGroup.scale.clone();
+          homeModelGroup.position.set(0, 0, 0);
+          homeModelGroup.rotation.set(0, 0, 0);
+          homeModelGroup.scale.set(1, 1, 1);
+          homeModelGroup.updateMatrixWorld(true);
+          localBboxRef.current = new THREE.Box3().setFromObject(homeModelGroup);
+          homeModelGroup.position.copy(savedPos);
+          homeModelGroup.rotation.copy(savedRot);
+          homeModelGroup.scale.copy(savedScale);
+          homeModelGroup.updateMatrixWorld(true);
+        }
+
+        homeModelGroup.updateMatrixWorld(false);
+        const invMat = homeModelGroup.matrixWorld.clone().invert();
+        const localPos = new THREE.Vector3(newX, 0, newZ).applyMatrix4(invMat);
+        const lb = localBboxRef.current;
+        localPos.x = THREE.MathUtils.clamp(localPos.x, lb.min.x + BOUNDARY_MARGIN, lb.max.x - BOUNDARY_MARGIN);
+        localPos.z = THREE.MathUtils.clamp(localPos.z, lb.min.z + BOUNDARY_MARGIN, lb.max.z - BOUNDARY_MARGIN);
+        const worldPos = localPos.applyMatrix4(homeModelGroup.matrixWorld);
+        pos.x = worldPos.x;
+        pos.z = worldPos.z;
       } else {
         pos.x = newX;
         pos.z = newZ;
@@ -341,14 +359,14 @@ class AvatarErrorBoundary extends React.Component<
 export interface AvatarControllerProps {
   avatarUrl?: string;
   spawnPosition?: [number, number, number];
-  roomBoundary?: RoomBoundary;
+  homeModelGroup?: THREE.Group;
   onLoadError?: () => void;
 }
 
 export function AvatarController({
   avatarUrl = DEFAULT_AVATAR_URL,
   spawnPosition,
-  roomBoundary,
+  homeModelGroup,
   onLoadError,
 }: AvatarControllerProps) {
   return (
@@ -357,7 +375,7 @@ export function AvatarController({
         <AvatarControllerInner
           avatarUrl={avatarUrl}
           spawnPosition={spawnPosition}
-          roomBoundary={roomBoundary}
+          homeModelGroup={homeModelGroup}
         />
       </React.Suspense>
     </AvatarErrorBoundary>
