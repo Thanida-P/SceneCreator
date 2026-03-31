@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Environment, PerspectiveCamera } from "@react-three/drei";
+import { Environment, PerspectiveCamera, OrbitControls } from "@react-three/drei";
 import { useXRStore, useXR } from "@react-three/xr";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
@@ -38,7 +38,6 @@ import {
 import { makeAuthenticatedRequest, logout } from "../../utils/Auth";
 import { compressWallpaperEntriesInDeployedItems } from "../../utils/compressImageForStorage";
 import { VRSidebar } from "../panel/VRSidebar";
-// import { VRAlignmentPanel, VRAlignmentConfirmPanel } from "../panel/VRAlignmentPanel";
 import { VRAlignmentPanel } from "../panel/VRAlignmentPanel";
 import { TransformGizmo } from "../panel/TransformGizmo";
 import { RotationGizmo } from "../panel/RotationGizmo";
@@ -204,6 +203,8 @@ interface SceneState {
   showAvatarMode: boolean;
   avatarLoadError: boolean;
   selectedAvatarIndex: number;
+  avatarSpawnPosition: [number, number, number] | null;
+  avatarHomeModelGroup: THREE.Group | null;
   whiteboardTool: WhiteboardTool;
   showCornerSelection: boolean;
   showHeadTrackingAlignment: boolean;
@@ -2028,11 +2029,29 @@ class SceneContentLogic {
           sidebarActiveItem: null,
         });
       } else {
-        // Activate avatar mode – close all other panels first
         this.navigationController?.setEnabled(false);
         const savedAvatarIdx = parseInt(localStorage.getItem("selectedAvatarIndex") ?? "4", 10);
+
+        let spawnPos: [number, number, number] | null = null;
+        let homeModelGroup: THREE.Group | null = null;
+        const homeModel = this.sceneManager?.getHomeModel();
+        if (homeModel) {
+          const group = homeModel.getGroup();
+          if (group) {
+            const bbox = new THREE.Box3().setFromObject(group);
+            if (!bbox.isEmpty()) {
+              const center = new THREE.Vector3();
+              bbox.getCenter(center);
+              spawnPos = [center.x, 0, center.z];
+              homeModelGroup = group;
+            }
+          }
+        }
+
         this.updateState({
           showAvatarMode: true,
+          avatarSpawnPosition: spawnPos,
+          avatarHomeModelGroup: homeModelGroup,
           selectedAvatarIndex: savedAvatarIdx,
           showFurniture: false,
           showControlPanel: false,
@@ -3388,6 +3407,8 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
     showAvatarMode: false,
     avatarLoadError: false,
     selectedAvatarIndex: 4,
+    avatarSpawnPosition: null,
+    avatarHomeModelGroup: null,
     immersiveSessionKind: null,
   });
 
@@ -4041,12 +4062,26 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
           />
         </group>
       </HeadLockedUI>
-      {/* ── Avatar 3rd-person mode ── */}
       {state.showAvatarMode && AVATAR_URL_MAP[state.selectedAvatarIndex] && (
         <AvatarController
           key={`avatar-${state.selectedAvatarIndex}`}
           avatarUrl={AVATAR_URL_MAP[state.selectedAvatarIndex]!}
+          spawnPosition={state.avatarSpawnPosition ?? undefined}
+          homeModelGroup={state.avatarHomeModelGroup ?? undefined}
           onLoadError={() => logic.updateState({ avatarLoadError: true })}
+        />
+      )}
+      {state.showAvatarMode && !xr.session && (
+        <OrbitControls
+          makeDefault
+          enablePan={true}
+          enableRotate={true}
+          enableZoom={true}
+          target={
+            state.avatarSpawnPosition
+              ? new THREE.Vector3(state.avatarSpawnPosition[0], 1, state.avatarSpawnPosition[2])
+              : new THREE.Vector3(0, 1, 0)
+          }
         />
       )}
 
