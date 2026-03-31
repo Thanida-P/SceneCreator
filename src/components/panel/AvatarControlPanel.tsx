@@ -3,7 +3,7 @@ import { Text, useCursor, RenderTexture, PerspectiveCamera, useGLTF } from "@rea
 import { RoundedPlane } from "./common/PanelElements";
 import { AVATAR_URL_MAP } from "../scene/AvatarController";
 
-export const AVATAR_INDICES = [4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+export const AVATAR_INDICES = [1, 2, 3, 4, 5, 6] as const;
 export type AvatarIndex = (typeof AVATAR_INDICES)[number];
 
 function AvatarPickerButton({
