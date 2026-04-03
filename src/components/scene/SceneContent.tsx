@@ -2806,9 +2806,10 @@ class SceneContentLogic {
   handleSelectWhiteboardInExperience(id: string): void {
     const furniture = this.sceneManager?.getFurniture(id);
     if (!furniture || furniture.getMetadata().type !== "Whiteboard") return;
+    const sameBoard = this.state.experienceWhiteboardId === id;
     this.updateState({
       experienceWhiteboardId: id,
-      whiteboardTool: "pen",
+      ...(sameBoard ? {} : { whiteboardTool: "pen" }),
     });
   }
 
