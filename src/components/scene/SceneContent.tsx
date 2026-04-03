@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Environment, PerspectiveCamera, OrbitControls } from "@react-three/drei";
 import { useXRStore, useXR, isXRInputSourceState } from "@react-three/xr";
-import { useFrame, useThree } from "@react-three/fiber";
+import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { CatalogToggle } from "../panel/furniture/FurnitureCatalogToggle";
 import { VRInstructionPanel } from "../panel/VRInstructionPanel";
@@ -60,60 +60,6 @@ function getBuiltInWidgetType(itemData: {
   const name = itemData.name?.toLowerCase();
   if (!name || !BUILTIN_WIDGET_NAMES.includes(name as any)) return null;
   return name as (typeof BUILTIN_WIDGET_NAMES)[number];
-}
-
-function WhiteboardHitTarget({
-  boardMesh,
-  isSelected,
-  onSelect,
-  onPointerMove,
-  onPointerLeave,
-}: {
-  boardMesh: THREE.Mesh;
-  isSelected: boolean;
-  onSelect: () => void;
-  onPointerMove: (point: THREE.Vector3, inputSource: XRInputSource | null) => void;
-  onPointerLeave: () => void;
-}) {
-  const groupRef = useRef<THREE.Group>(null);
-  useFrame(() => {
-    if (!groupRef.current || !boardMesh) return;
-    groupRef.current.position.setFromMatrixPosition(boardMesh.matrixWorld);
-    groupRef.current.quaternion.setFromRotationMatrix(boardMesh.matrixWorld);
-    groupRef.current.scale.setFromMatrixScale(boardMesh.matrixWorld);
-  });
-  return (
-    <group ref={groupRef}>
-      <mesh
-        onPointerDown={(e: any) => {
-          e.stopPropagation();
-          onSelect();
-        }}
-        onClick={(e: any) => {
-          e.stopPropagation();
-          onSelect();
-        }}
-        onPointerMove={(e: any) => {
-          e.stopPropagation();
-          if (!isSelected) return;
-          const ps = e.pointerState;
-          const inputSource =
-            isXRInputSourceState(ps) && ps.type === "controller"
-              ? ps.inputSource
-              : null;
-          onPointerMove(e.point.clone(), inputSource);
-        }}
-        onPointerLeave={() => onPointerLeave()}
-      >
-        <planeGeometry args={[1.0, 0.6]} />
-        <meshBasicMaterial
-          visible={false}
-          side={THREE.DoubleSide}
-          depthWrite={false}
-        />
-      </mesh>
-    </group>
-  );
 }
 
 function FakeVRPassthroughBlocker({ enabled }: { enabled: boolean }) {
@@ -253,11 +199,9 @@ class SceneContentLogic {
   public renderer: THREE.WebGLRenderer | null = null;
   private lastFrameWhiteboardDrawing = false;
   public lastWhiteboardPointerPoint: THREE.Vector3 | null = null;
+  public lastWhiteboardPointerUv: THREE.Vector2 | null = null;
   public lastWhiteboardPointerId: string | null = null;
   public lastWhiteboardPointerInputSource: XRInputSource | null = null;
-  private readonly whiteboardPoseMatrix = new THREE.Matrix4();
-  private readonly whiteboardPoseQuat = new THREE.Quaternion();
-  private readonly whiteboardPoseScale = new THREE.Vector3();
 
   public pendingMove: [number, number, number] | null = null;
   public currentAABBPosition: [number, number, number] | null = null;
@@ -2897,11 +2841,13 @@ class SceneContentLogic {
     whiteboardId: string,
     worldPoint: THREE.Vector3,
     inputSource: XRInputSource | null,
+    geometryUv?: THREE.Vector2 | null,
   ): void {
     this.lastWhiteboardPointerId = whiteboardId;
     if (!this.lastWhiteboardPointerPoint) this.lastWhiteboardPointerPoint = new THREE.Vector3();
     this.lastWhiteboardPointerPoint.copy(worldPoint);
     this.lastWhiteboardPointerInputSource = inputSource;
+    this.lastWhiteboardPointerUv = geometryUv ? geometryUv.clone() : null;
   }
 
   clearWhiteboardPointerHit(): void {
@@ -2912,6 +2858,8 @@ class SceneContentLogic {
     }
     this.lastWhiteboardPointerId = null;
     this.lastWhiteboardPointerInputSource = null;
+    this.lastWhiteboardPointerUv = null;
+    this.lastWhiteboardPointerPoint = null;
   }
 
   handleGizmoMove(axis: "x" | "y" | "z", delta: number): void {
@@ -3295,7 +3243,7 @@ class SceneContentLogic {
     if (this.state.experienceMode && wbId && this.sceneManager) {
       const wb = this.sceneManager.getFurniture(wbId) as WhiteboardWidget | undefined;
       if (wb) {
-        let drawPoint: THREE.Vector3 | null = null;
+        let drawSample: { point: THREE.Vector3; uv: THREE.Vector2 } | null = null;
         let whiteboardPinnedHandOnly = false;
         const boardMesh = wb.getBoardMesh?.();
         const refSpace = this.renderer?.xr?.getReferenceSpace?.() ?? null;
@@ -3304,25 +3252,36 @@ class SceneContentLogic {
         const raycaster = new THREE.Raycaster();
         const rayOrigin = new THREE.Vector3();
         const rayDir = new THREE.Vector3();
-        const hitBoardFromInputSource = (inputSource: XRInputSource): THREE.Vector3 | null => {
+        const hitBoardFromInputSource = (
+          inputSource: XRInputSource,
+        ): { point: THREE.Vector3; uv: THREE.Vector2 } | null => {
           if (!boardMesh || !xrFrame || !refSpace) return null;
           if (inputSource.targetRayMode !== "tracked-pointer") return null;
-          let inputPose = xrFrame.getPose(inputSource.targetRaySpace, refSpace);
-          if (!inputPose && inputSource.gripSpace) {
-            inputPose = xrFrame.getPose(inputSource.gripSpace, refSpace);
-          }
+          const inputPose = xrFrame.getPose(inputSource.targetRaySpace, refSpace);
           if (!inputPose) return null;
-          this.whiteboardPoseMatrix.fromArray(inputPose.transform.matrix as unknown as number[]);
-          this.whiteboardPoseMatrix.decompose(
-            rayOrigin,
-            this.whiteboardPoseQuat,
-            this.whiteboardPoseScale,
-          );
-          rayDir.set(0, 0, -1).applyQuaternion(this.whiteboardPoseQuat).normalize();
-          boardMesh.updateMatrixWorld(true);
-          raycaster.set(rayOrigin, rayDir);
-          const hits = raycaster.intersectObject(boardMesh, true);
-          return hits.length > 0 ? hits[0].point : null;
+          wb.getGroup().updateWorldMatrix(true, true);
+          const m = inputPose.transform.matrix as unknown as number[] | Float32Array;
+          rayOrigin.set(m[12], m[13], m[14]);
+          const cast = (): { point: THREE.Vector3; uv: THREE.Vector2 } | null => {
+            raycaster.set(rayOrigin, rayDir);
+            const hits = raycaster.intersectObject(boardMesh, true);
+            if (hits.length === 0) return null;
+            const h = hits[0];
+            const uv =
+              h.uv?.clone() ?? (h.point ? wb.worldPointToBoardUv(h.point) : null);
+            if (!uv) return null;
+            return { point: h.point.clone(), uv };
+          };
+          rayDir.set(-m[8], -m[9], -m[10]);
+          if (rayDir.lengthSq() < 1e-12) return null;
+          rayDir.normalize();
+          let hit = cast();
+          if (hit) return hit;
+          rayDir.set(m[8], m[9], m[10]);
+          if (rayDir.lengthSq() < 1e-12) return null;
+          rayDir.normalize();
+          hit = cast();
+          return hit;
         };
 
         const usePointerHit =
@@ -3336,16 +3295,24 @@ class SceneContentLogic {
             const gamepad = stillActive ? pinned.gamepad : null;
             const triggerOnly = gamepad?.buttons?.[0]?.pressed ?? false;
             if (triggerOnly) {
-              whiteboardPinnedHandOnly = true;
-              drawPoint = hitBoardFromInputSource(pinned);
-              if (!drawPoint && this.lastWhiteboardPointerPoint) {
-                drawPoint = this.lastWhiteboardPointerPoint;
+              drawSample = hitBoardFromInputSource(pinned);
+              if (!drawSample && this.lastWhiteboardPointerPoint) {
+                wb.getGroup().updateWorldMatrix(true, true);
+                const uv =
+                  this.lastWhiteboardPointerUv?.clone() ??
+                  wb.worldPointToBoardUv(this.lastWhiteboardPointerPoint);
+                if (uv) {
+                  drawSample = { point: this.lastWhiteboardPointerPoint, uv };
+                }
+              }
+              if (drawSample) {
+                whiteboardPinnedHandOnly = true;
               }
             }
           }
         }
         if (
-          !drawPoint &&
+          !drawSample &&
           !whiteboardPinnedHandOnly &&
           this.renderer?.xr &&
           session.inputSources &&
@@ -3359,14 +3326,14 @@ class SceneContentLogic {
             if (!gamepad?.buttons?.[0]?.pressed) continue;
             const hit = hitBoardFromInputSource(inputSource);
             if (hit) {
-              drawPoint = hit;
+              drawSample = hit;
               break;
             }
           }
         }
-        if (drawPoint) {
+        if (drawSample) {
           if (!this.lastFrameWhiteboardDrawing) wb.startStroke();
-          wb.drawAt(drawPoint, this.state.whiteboardTool);
+          wb.drawAt(drawSample.point, this.state.whiteboardTool, drawSample.uv);
           whiteboardDrawingThisFrame = true;
         } else if (this.lastFrameWhiteboardDrawing) {
           wb.endStroke();
@@ -3558,6 +3525,8 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
   const isARSession = sessionState.session && sessionState.mode === "immersive-ar";
   const wantsPassthroughAR = state.homeTransparent || state.showHeadTrackingAlignment || state.alignmentARModeRequested;
   const isPassthroughARMode = Boolean(isARSession) && wantsPassthroughAR;
+  const hideAvatarInSidebar =
+    isPassthroughARMode || state.immersiveSessionKind === "ar";
   const isVRMode = Boolean(isARSession) && !isPassthroughARMode && !state.legacyManualAlignment && !state.waitingForAlignmentConfirmation;
   
   useEffect(() => {
@@ -3590,6 +3559,16 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
   if (!logicRef.current) return null;
 
   const logic = logicRef.current;
+
+  const sampleWhiteboardPointer = (e: any, furnitureId: string) => {
+    if (!e?.point) return;
+    const ps = e.pointerState;
+    const inputSource =
+      isXRInputSourceState(ps) && ps.type === "controller" ? ps.inputSource : null;
+    const uv = e.uv?.clone() ?? null;
+    logic.recordWhiteboardPointerHit(furnitureId, e.point.clone(), inputSource, uv);
+  };
+
   const uiLocked = state.showFurniture ||
     state.showControlPanel || 
     state.showNotification ||
@@ -3719,17 +3698,41 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
                   onPointerMove={handlePointerMove}
                   onPointerUp={handlePointerUp}
                 />
-                {isWhiteboard && state.experienceMode && boardMesh && (
-                  <WhiteboardHitTarget
-                    boardMesh={boardMesh}
-                    isSelected={state.experienceWhiteboardId === furniture.getId()}
-                    onSelect={() => logic.handleSelectWhiteboardInExperience(furniture.getId())}
-                    onPointerMove={(point, inputSource) =>
-                      logic.recordWhiteboardPointerHit(furniture.getId(), point, inputSource)
-                    }
-                    onPointerLeave={() => logic.clearWhiteboardPointerHit()}
-                  />
-                )}
+                {isWhiteboard &&
+                  state.experienceMode &&
+                  boardMesh &&
+                  createPortal(
+                    <mesh
+                      onPointerDown={(e: any) => {
+                        e.stopPropagation();
+                        logic.handleSelectWhiteboardInExperience(furniture.getId());
+                        sampleWhiteboardPointer(e, furniture.getId());
+                      }}
+                      onClick={(e: any) => {
+                        e.stopPropagation();
+                        logic.handleSelectWhiteboardInExperience(furniture.getId());
+                      }}
+                      onPointerMove={(e: any) => {
+                        e.stopPropagation();
+                        if (state.experienceWhiteboardId !== furniture.getId()) return;
+                        sampleWhiteboardPointer(e, furniture.getId());
+                      }}
+                      onPointerOut={() => {
+                        if (state.experienceWhiteboardId === furniture.getId()) {
+                          logic.clearWhiteboardPointerHit();
+                        }
+                      }}
+                    >
+                      <planeGeometry args={[1.0, 0.6]} />
+                      <meshBasicMaterial
+                        transparent
+                        opacity={0}
+                        depthWrite={false}
+                        side={THREE.FrontSide}
+                      />
+                    </mesh>,
+                    boardMesh,
+                  )}
               </React.Fragment>
             );
           })}
@@ -4075,11 +4078,9 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
             activeItemId={state.sidebarActiveItem}
             visibleItemIds={
               state.experienceMode
-                ? isPassthroughARMode
+                ? hideAvatarInSidebar
                   ? ["settings"]
-                  : state.immersiveSessionKind === "vr"
-                    ? ["settings", "avatar"]
-                    : ["settings"]
+                  : ["settings", "avatar"]
                 : undefined
             }
             extraItems={
@@ -4103,7 +4104,7 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
                 ? undefined
                 : (() => {
                     const hidden: string[] = [];
-                    if (isPassthroughARMode) hidden.push("avatar");
+                    if (hideAvatarInSidebar) hidden.push("avatar");
                     if (
                       state.selectedItemId &&
                       logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
