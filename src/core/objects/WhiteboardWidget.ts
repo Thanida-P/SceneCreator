@@ -116,6 +116,10 @@ export class WhiteboardWidget extends FurnitureItem {
         const dx = x - this.lastDrawPoint.x;
         const dy = y - this.lastDrawPoint.y;
         const dist = Math.hypot(dx, dy);
+        if (dist < 0.35) {
+          this.drawTexture.needsUpdate = true;
+          return;
+        }
         const stepPx = 4;
         if (dist > stepPx) {
           const steps = Math.ceil(dist / stepPx);
