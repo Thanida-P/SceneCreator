@@ -1814,7 +1814,8 @@ class SceneContentLogic {
         showScalePanel: false,
         showTexturePanel: false,
         showFurniture: false,
-        showSidebar: false,
+        showControlPanel: false,
+        showSidebar: true,
         sidebarActiveItem: null,
       });
     } else {
@@ -1852,7 +1853,13 @@ class SceneContentLogic {
   }
 
   handleSidebarItemSelect(itemId: string): void {
-    if (this.state.experienceMode) return;
+    if (
+      this.state.experienceMode &&
+      itemId !== "settings" &&
+      itemId !== "avatar"
+    ) {
+      return;
+    }
 
     if (this.state.sidebarActiveItem === itemId) {
     this.updateState({
@@ -4059,38 +4066,53 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
       <HeadLockedUI
         distance={1.4}
         verticalOffset={0}
-        enabled={state.showSidebar && !state.experienceMode}
+        enabled={state.showSidebar}
       >
         <group position={[-0.8, 0, 0]}>
           <VRSidebar
-            show={state.showSidebar && !state.experienceMode}
+            show={state.showSidebar}
             onItemSelect={(itemId) => logic.handleSidebarItemSelect(itemId)}
             activeItemId={state.sidebarActiveItem}
-            extraItems={
-              state.selectedItemId &&
-              logic.sceneManager?.isWallMounted(state.selectedItemId)
-                ? [
-                    {
-                      id: "wall",
-                      icon: "▤",
-                      label: "Wall",
-                      color: "#64748B",
-                      description: "Move in/out from wall",
-                    },
-                  ]
+            visibleItemIds={
+              state.experienceMode
+                ? isPassthroughARMode
+                  ? ["settings"]
+                  : state.immersiveSessionKind === "vr"
+                    ? ["settings", "avatar"]
+                    : ["settings"]
                 : undefined
             }
-            hiddenItemIds={(() => {
-              const hidden: string[] = [];
-              if (isPassthroughARMode) hidden.push("avatar");
-              if (
-                state.selectedItemId &&
-                logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
-              ) {
-                hidden.push("movement", "rotation");
-              }
-              return hidden.length > 0 ? hidden : undefined;
-            })()}
+            extraItems={
+              state.experienceMode
+                ? undefined
+                : state.selectedItemId &&
+                    logic.sceneManager?.isWallMounted(state.selectedItemId)
+                  ? [
+                      {
+                        id: "wall",
+                        icon: "▤",
+                        label: "Wall",
+                        color: "#64748B",
+                        description: "Move in/out from wall",
+                      },
+                    ]
+                  : undefined
+            }
+            hiddenItemIds={
+              state.experienceMode
+                ? undefined
+                : (() => {
+                    const hidden: string[] = [];
+                    if (isPassthroughARMode) hidden.push("avatar");
+                    if (
+                      state.selectedItemId &&
+                      logic.sceneManager?.getFurniture(state.selectedItemId)?.isWallpaper?.()
+                    ) {
+                      hidden.push("movement", "rotation");
+                    }
+                    return hidden.length > 0 ? hidden : undefined;
+                  })()
+            }
           />
         </group>
       </HeadLockedUI>
