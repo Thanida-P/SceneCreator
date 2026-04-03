@@ -3,7 +3,7 @@ import * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Environment, PerspectiveCamera, OrbitControls } from "@react-three/drei";
-import { useXRStore, useXR } from "@react-three/xr";
+import { useXRStore, useXR, isXRInputSourceState } from "@react-three/xr";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { CatalogToggle } from "../panel/furniture/FurnitureCatalogToggle";
@@ -72,7 +72,7 @@ function WhiteboardHitTarget({
   boardMesh: THREE.Mesh;
   isSelected: boolean;
   onSelect: () => void;
-  onPointerMove: (point: THREE.Vector3) => void;
+  onPointerMove: (point: THREE.Vector3, inputSource: XRInputSource | null) => void;
   onPointerLeave: () => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
@@ -95,7 +95,13 @@ function WhiteboardHitTarget({
         }}
         onPointerMove={(e: any) => {
           e.stopPropagation();
-          if (isSelected) onPointerMove(e.point.clone());
+          if (!isSelected) return;
+          const ps = e.pointerState;
+          const inputSource =
+            isXRInputSourceState(ps) && ps.type === "controller"
+              ? ps.inputSource
+              : null;
+          onPointerMove(e.point.clone(), inputSource);
         }}
         onPointerLeave={() => onPointerLeave()}
       >
@@ -248,6 +254,10 @@ class SceneContentLogic {
   private lastFrameWhiteboardDrawing = false;
   public lastWhiteboardPointerPoint: THREE.Vector3 | null = null;
   public lastWhiteboardPointerId: string | null = null;
+  public lastWhiteboardPointerInputSource: XRInputSource | null = null;
+  private readonly whiteboardPoseMatrix = new THREE.Matrix4();
+  private readonly whiteboardPoseQuat = new THREE.Quaternion();
+  private readonly whiteboardPoseScale = new THREE.Vector3();
 
   public pendingMove: [number, number, number] | null = null;
   public currentAABBPosition: [number, number, number] | null = null;
@@ -2876,10 +2886,15 @@ class SceneContentLogic {
     wb?.clear?.();
   }
 
-  recordWhiteboardPointerHit(whiteboardId: string, worldPoint: THREE.Vector3): void {
+  recordWhiteboardPointerHit(
+    whiteboardId: string,
+    worldPoint: THREE.Vector3,
+    inputSource: XRInputSource | null,
+  ): void {
     this.lastWhiteboardPointerId = whiteboardId;
     if (!this.lastWhiteboardPointerPoint) this.lastWhiteboardPointerPoint = new THREE.Vector3();
     this.lastWhiteboardPointerPoint.copy(worldPoint);
+    this.lastWhiteboardPointerInputSource = inputSource;
   }
 
   clearWhiteboardPointerHit(): void {
@@ -2889,6 +2904,7 @@ class SceneContentLogic {
       wb?.endStroke();
     }
     this.lastWhiteboardPointerId = null;
+    this.lastWhiteboardPointerInputSource = null;
   }
 
   handleGizmoMove(axis: "x" | "y" | "z", delta: number): void {
@@ -3273,40 +3289,71 @@ class SceneContentLogic {
       const wb = this.sceneManager.getFurniture(wbId) as WhiteboardWidget | undefined;
       if (wb) {
         let drawPoint: THREE.Vector3 | null = null;
+        let whiteboardPinnedHandOnly = false;
+        const boardMesh = wb.getBoardMesh?.();
+        const refSpace = this.renderer?.xr?.getReferenceSpace?.() ?? null;
+        const xrFrame =
+          frame ?? (this.renderer?.xr as THREE.WebXRManager | undefined)?.getFrame?.() ?? null;
+        const raycaster = new THREE.Raycaster();
+        const rayOrigin = new THREE.Vector3();
+        const rayDir = new THREE.Vector3();
+        const hitBoardFromInputSource = (inputSource: XRInputSource): THREE.Vector3 | null => {
+          if (!boardMesh || !xrFrame || !refSpace) return null;
+          if (inputSource.targetRayMode !== "tracked-pointer") return null;
+          let inputPose = xrFrame.getPose(inputSource.targetRaySpace, refSpace);
+          if (!inputPose && inputSource.gripSpace) {
+            inputPose = xrFrame.getPose(inputSource.gripSpace, refSpace);
+          }
+          if (!inputPose) return null;
+          this.whiteboardPoseMatrix.fromArray(inputPose.transform.matrix as unknown as number[]);
+          this.whiteboardPoseMatrix.decompose(
+            rayOrigin,
+            this.whiteboardPoseQuat,
+            this.whiteboardPoseScale,
+          );
+          rayDir.set(0, 0, -1).applyQuaternion(this.whiteboardPoseQuat).normalize();
+          boardMesh.updateMatrixWorld(true);
+          raycaster.set(rayOrigin, rayDir);
+          const hits = raycaster.intersectObject(boardMesh, true);
+          return hits.length > 0 ? hits[0].point : null;
+        };
+
         const usePointerHit =
           this.lastWhiteboardPointerId === wbId && this.lastWhiteboardPointerPoint;
         if (usePointerHit && session.inputSources) {
-          for (let i = 0; i < session.inputSources.length; i++) {
-            const gamepad = session.inputSources[i]?.gamepad;
-            const trigger = gamepad?.buttons?.[0]?.pressed ?? false;
-            const grip = gamepad?.buttons?.[1]?.pressed ?? false;
-            if (trigger || grip) {
-              drawPoint = this.lastWhiteboardPointerPoint;
-              break;
+          const pinned = this.lastWhiteboardPointerInputSource;
+          if (pinned) {
+            const stillActive = Array.from(session.inputSources as Iterable<XRInputSource>).some(
+              (s) => s === pinned,
+            );
+            const gamepad = stillActive ? pinned.gamepad : null;
+            const triggerOnly = gamepad?.buttons?.[0]?.pressed ?? false;
+            if (triggerOnly) {
+              whiteboardPinnedHandOnly = true;
+              drawPoint = hitBoardFromInputSource(pinned);
+              if (!drawPoint && this.lastWhiteboardPointerPoint) {
+                drawPoint = this.lastWhiteboardPointerPoint;
+              }
             }
           }
         }
-        if (!drawPoint && this.renderer?.xr && session.inputSources) {
-          const boardMesh = wb.getBoardMesh?.();
-          if (boardMesh) {
-            const raycaster = new THREE.Raycaster();
-            const origin = new THREE.Vector3();
-            const direction = new THREE.Vector3();
-            for (let i = 0; i <= 1; i++) {
-              const controller = (this.renderer as any).xr.getController?.(i);
-              if (!controller) continue;
-              const gamepad = session.inputSources[i]?.gamepad;
-              const trigger = gamepad?.buttons?.[0]?.pressed ?? false;
-              const grip = gamepad?.buttons?.[1]?.pressed ?? false;
-              if (!trigger && !grip) continue;
-              controller.getWorldPosition(origin);
-              controller.getWorldDirection(direction);
-              raycaster.set(origin, direction);
-              const hits = raycaster.intersectObject(boardMesh, true);
-              if (hits.length > 0) {
-                drawPoint = hits[0].point;
-                break;
-              }
+        if (
+          !drawPoint &&
+          !whiteboardPinnedHandOnly &&
+          this.renderer?.xr &&
+          session.inputSources &&
+          boardMesh &&
+          xrFrame &&
+          refSpace
+        ) {
+          for (const inputSource of session.inputSources as Iterable<XRInputSource>) {
+            if (inputSource.targetRayMode !== "tracked-pointer") continue;
+            const gamepad = inputSource.gamepad;
+            if (!gamepad?.buttons?.[0]?.pressed) continue;
+            const hit = hitBoardFromInputSource(inputSource);
+            if (hit) {
+              drawPoint = hit;
+              break;
             }
           }
         }
@@ -3670,8 +3717,8 @@ export function SceneContent({ homeId, digitalHome, arModeRequested }: SceneCont
                     boardMesh={boardMesh}
                     isSelected={state.experienceWhiteboardId === furniture.getId()}
                     onSelect={() => logic.handleSelectWhiteboardInExperience(furniture.getId())}
-                    onPointerMove={(point) =>
-                      logic.recordWhiteboardPointerHit(furniture.getId(), point)
+                    onPointerMove={(point, inputSource) =>
+                      logic.recordWhiteboardPointerHit(furniture.getId(), point, inputSource)
                     }
                     onPointerLeave={() => logic.clearWhiteboardPointerHit()}
                   />
