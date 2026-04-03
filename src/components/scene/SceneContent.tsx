@@ -2480,7 +2480,6 @@ class SceneContentLogic {
           showSlider: true,
           selectedItemPlacementMode: "floor",
         });
-        this.showNotificationMessage("Weather widget added!", "success");
       });
       return;
     }
