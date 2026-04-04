@@ -823,6 +823,12 @@ class SceneContentLogic {
               maybeMountWallIfCloseToBoundary(furniture, interp.position);
 
               await this.sceneManager.addFurniture(furniture);
+              if (widgetType === "whiteboard") {
+                const wbImage = itemData.whiteboard_image;
+                if (typeof wbImage === "string" && wbImage.length > 0) {
+                  (furniture as WhiteboardWidget).applySerializedImage(wbImage);
+                }
+              }
               if (sd) {
                 this.sceneManager.registerDeployedSpatialSnapshot(
                   itemId,
