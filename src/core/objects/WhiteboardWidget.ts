@@ -180,6 +180,36 @@ export class WhiteboardWidget extends FurnitureItem {
     this.drawTexture.needsUpdate = true;
   }
 
+  applySerializedImage(dataUrl: string): void {
+    if (!this.ctx || !this.canvas || !this.drawTexture || !dataUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      if (!this.ctx || !this.drawTexture) return;
+      this.ctx.fillStyle = '#ffffff';
+      this.ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      this.ctx.drawImage(img, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      this.drawTexture.needsUpdate = true;
+    };
+    img.src = dataUrl;
+  }
+
+  override serialize(): Record<string, unknown> {
+    const base = super.serialize();
+    let whiteboard_image: string | undefined;
+    try {
+      if (this.canvas) {
+        whiteboard_image = this.canvas.toDataURL('image/png');
+      }
+    } catch {
+      // nothing
+    }
+    return {
+      ...base,
+      widget_type: 'whiteboard',
+      ...(whiteboard_image ? { whiteboard_image } : {}),
+    };
+  }
+
   override dispose(): void {
     if (this.drawTexture) {
       this.drawTexture.dispose();
