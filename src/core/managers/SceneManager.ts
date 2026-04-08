@@ -77,13 +77,16 @@ export class SceneManager {
   private registerHomeModelStaticFurniture(): void {
     if (!this.homeModel) return;
 
-    const roomBox = this.collisionDetector.getRoomBoundary();
-
     this.homeModel.getGroup().updateMatrixWorld(true);
 
-    const rw = roomBox ? roomBox.max.x - roomBox.min.x : Infinity;
-    const rh = roomBox ? roomBox.max.y - roomBox.min.y : Infinity;
-    const rd = roomBox ? roomBox.max.z - roomBox.min.z : Infinity;
+    // Use LOCAL room dimensions for structural element detection so that
+    // world-alignment rotation does not inflate the AABB and cause walls /
+    // floors / ceilings to escape the filter and register as static objects.
+    const boundary = this.homeModel.getBoundary();
+    const rw = boundary ? boundary.max_x - boundary.min_x : Infinity;
+    const rh = boundary ? boundary.max_y - boundary.min_y : Infinity;
+    const rd = boundary ? boundary.max_z - boundary.min_z : Infinity;
+    const worldToLocal = this.homeModel.getGroup().matrixWorld.clone().invert();
     const THRESHOLD = 0.85;
 
     let index = 0;
@@ -91,16 +94,33 @@ export class SceneManager {
     this.homeModel.getGroup().traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return;
 
-      const box = new THREE.Box3().setFromObject(child);
-      if (box.isEmpty()) return;
+      const worldBox = new THREE.Box3().setFromObject(child);
+      if (worldBox.isEmpty()) return;
 
+      // Transform the world-space AABB corners to home-local space so that the
+      // size comparison is rotation-invariant.
+      const corners = [
+        new THREE.Vector3(worldBox.min.x, worldBox.min.y, worldBox.min.z),
+        new THREE.Vector3(worldBox.min.x, worldBox.min.y, worldBox.max.z),
+        new THREE.Vector3(worldBox.min.x, worldBox.max.y, worldBox.min.z),
+        new THREE.Vector3(worldBox.min.x, worldBox.max.y, worldBox.max.z),
+        new THREE.Vector3(worldBox.max.x, worldBox.min.y, worldBox.min.z),
+        new THREE.Vector3(worldBox.max.x, worldBox.min.y, worldBox.max.z),
+        new THREE.Vector3(worldBox.max.x, worldBox.max.y, worldBox.min.z),
+        new THREE.Vector3(worldBox.max.x, worldBox.max.y, worldBox.max.z),
+      ];
+      const localBox = new THREE.Box3();
+      for (const c of corners) {
+        c.applyMatrix4(worldToLocal);
+        localBox.expandByPoint(c);
+      }
       const size = new THREE.Vector3();
-      box.getSize(size);
+      localBox.getSize(size);
 
       // Skip objects smaller than 5 cm in every dimension
       if (size.x < 0.05 && size.y < 0.05 && size.z < 0.05) return;
 
-      // Skip structural elements
+      // Skip structural elements (walls, floor, ceiling)
       const spansCount = [
         size.x > rw * THRESHOLD,
         size.y > rh * THRESHOLD,
@@ -108,7 +128,7 @@ export class SceneManager {
       ].filter(Boolean).length;
       if (spansCount >= 2) return;
 
-      this.collisionDetector.registerStaticBox(index, box);
+      this.collisionDetector.registerStaticBox(index, worldBox);
       index++;
     });
   }
