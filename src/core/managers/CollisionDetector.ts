@@ -113,6 +113,8 @@ export class CollisionDetector {
   }
 
   updateFurnitureBox(itemId: string, object: THREE.Object3D, modelId?: number): void {
+    object.updateWorldMatrix(true, true);
+
     const box = new THREE.Box3().setFromObject(object);
     this.furnitureBoxes.set(itemId, box);
 
